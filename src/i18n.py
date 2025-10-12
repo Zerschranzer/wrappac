@@ -1,0 +1,717 @@
+"""Simple translation system for WrapPac without external dependencies."""
+
+from settings import settings
+
+# Translation dictionaries
+TRANSLATIONS = {
+    "de": {
+        # Main window
+        "app_title": "WrapPac – GUI für pacman/AUR/Flatpak (PTY-Konsole, async Refresh)",
+        "btn_all": "Alle",
+        "btn_official": "Offizielle",
+        "btn_aur": "AUR",
+        "btn_flatpak": "Flatpak",
+        "btn_refresh": "Liste aktualisieren",
+        "btn_system_update": "System-Update",
+        "btn_run_reflector": "Reflector ausführen",
+        "btn_system_cleanup": "System aufräumen",
+        "search_placeholder": "Suche…",
+        "installed_filter_placeholder": "Installierte Pakete durchsuchen…",
+        "btn_search": "Suchen",
+        "install_queue": "Install-Queue",
+        "btn_install_queue": "Installiere Queue",
+        "btn_remove_from_queue": "Aus Queue entfernen",
+        "btn_clear_queue": "Queue leeren",
+
+        # Terminal
+        "terminal_placeholder": "Interaktive PTY-Konsole – hier tippen (Shift+Ctrl+C zum Kopieren, Shift+Ctrl+V zum Einfügen).",
+
+        # Menus
+        "menu_actions": "Aktionen",
+        "menu_settings": "Einstellungen",
+        "menu_help": "Hilfe",
+        "action_refresh": "Liste aktualisieren",
+        "action_settings": "Einstellungen…",
+        "action_tips": "Tipps",
+
+        # Dialogs - General
+        "btn_start": "Start",
+        "btn_cancel": "Abbrechen",
+        "btn_ok": "OK",
+        "btn_yes": "Ja",
+        "btn_no": "Nein",
+        "dialog_confirm": "Bestätigen",
+        "dialog_hint": "Hinweis",
+        "dialog_aur": "AUR",
+        "unknown": "unbekannt",
+
+        # Update dialog
+        "dialog_update_title": "System-Update",
+        "dialog_update_available": "Verfügbare Updates:",
+        "dialog_update_official": "Offizielle Repos",
+        "dialog_update_aur": "AUR",
+        "dialog_update_flatpak": "Flatpak",
+        "dialog_update_preview": "Nur anzeigen (Preview/Dry-run)",
+        "dialog_update_no_helper": "(kein Helper konfiguriert)",
+        "dialog_update_process_running": "Es läuft bereits ein Prozess im Terminal.\nBitte warte, bis dieser beendet ist.",
+        "dialog_update_no_source": "Keine Update-Quelle ausgewählt.",
+        "updates": "Updates",
+        "dialog_update_reflector_missing": "Reflector wurde nicht gefunden. Installiere 'reflector' oder passe den Reflector-Tab in den Einstellungen an.",
+        "cleanup_dialog_intro": "Wähle aus, welche Bereiche bereinigt werden sollen.",
+        "cleanup_dialog_hint": "Die genaue Arbeitsweise kannst du in den Einstellungen unter Systempflege anpassen.",
+        "cleanup_option_remove_orphans": "Nicht mehr benötigte Pakete entfernen (pacman -Qtdq / -Rns)",
+        "cleanup_option_clean_cache": "Paketcache aufräumen (paccache)",
+        "cleanup_option_remove_flatpak_runtimes": "Ungenutzte Flatpak-Runtimes entfernen",
+        "cleanup_option_clear_aur_cache": "AUR-Build-Cache löschen",
+        "cleanup_option_clean_logs": "Alte Systemlogs verkleinern",
+        "dialog_cleanup_title": "Systempflege",
+        "dialog_password_title": "Passwort erforderlich",
+        "dialog_password_prompt": "Bitte gib dein {tool}-Passwort ein, um fortzufahren.",
+
+        # Details dialogs
+        "dialog_details_title": "Details – {}",
+        "dialog_details_flatpak": "Details (Flatpak) – {}",
+        "dialog_details_repo": "Details (Repo) – {}",
+        "dialog_details_aur": "Details (AUR) – {}",
+        "dialog_unknown_source": "Unbekannte Quelle",
+
+        # Flatpak dialogs
+        "dialog_add_remote_as_user": "Remote als User hinzufügen?",
+        "dialog_remote_url_needed": "Remote-URL benötigt",
+        "dialog_remote_missing": "Remote fehlt",
+        "dialog_remotes_missing": "Remote(s) fehlen",
+
+        # Context menu
+        "ctx_show_details": "Details anzeigen",
+        "ctx_uninstall": "Deinstallieren",
+        "ctx_uninstall_item": "Deinstallieren: {}",
+        "ctx_install": "Installieren",
+        "ctx_add_to_queue": "Zu Queue hinzufügen",
+
+        # Messages - General
+        "msg_loading": "Bereits am Laden …",
+        "msg_loaded": "Geladen: {} Einträge",
+        "msg_package_list_loading": "== Paketlisten werden geladen (asynchron) ==",
+        "status_loading_packages": "Pakete werden geladen …",
+        "status_checking_updates": "Updates werden ermittelt …",
+        "msg_settings_saved": "Einstellungen gespeichert.",
+        "update_service_tray_title": "WrapPac Updates",
+        "update_service_tray_message": "{} Updates verfügbar",
+        "update_service_tray_details": "Pacman: {}, AUR: {}, Flatpak: {}",
+        "update_service_tray_tooltip": "{} Updates verfügbar",
+        "update_service_tray_open": "WrapPac öffnen",
+        "update_service_tray_quit": "Benachrichtigung schließen",
+        "msg_process_running": "Es läuft bereits ein Prozess.",
+        "single_instance_error": "WrapPac konnte die Einzelinstanz-Sperre nicht erstellen. Bitte versuche es erneut.",
+        "msg_update_check_start": "== Suche nach verfügbaren Updates ==",
+        "msg_no_root_method": "Fehler: Keine Root-Methode verfügbar (siehe Einstellungen)",
+        "msg_updates_complete": "== Updates fertig ==",
+        "msg_cleanup_start": "== Systempflege wird vorbereitet ==",
+        "msg_cleanup_complete": "== Systempflege abgeschlossen ==",
+        "msg_cleanup_orphans_none": "Keine verwaisten Pakete gefunden.",
+        "msg_cleanup_cache_fallback": "paccache nicht verfügbar – verwende pacman -Sc.",
+        "msg_cleanup_aur_cleaning": "Leere AUR-Build-Cache:",
+        "msg_cleanup_aur_done": "AUR-Build-Cache bereinigt.",
+        "msg_password_submitted": "Passwort wurde sicher übermittelt.",
+        "msg_password_cancelled": "Passworteingabe abgebrochen.",
+        "msg_provider_errors_header": "⚠️ Probleme bei externen Kommandos:",
+        "msg_command_failed_exit": "• {} – Exit-Code {}",
+        "msg_command_failed_not_found": "• {} – Kommando nicht gefunden.",
+        "msg_command_failed_exception": "• {} – Ausnahme: {}",
+        "msg_command_failed_args": "• {} – Ungültige Argumente: {}",
+        "msg_command_failed_generic": "• {} – {}",
+        "msg_reflector_unavailable": "Reflector konnte nicht gestartet werden.",
+        "msg_reflector_start": "== Reflector wird ausgeführt ==",
+        "msg_reflector_complete": "== Reflector abgeschlossen ==",
+        "tooltip_reflector_missing": "Reflector ist nicht installiert.",
+        "tooltip_reflector_ready": "Aktualisiert die Mirrorliste mit reflector gemäß deinen Einstellungen.",
+
+        # Messages - Uninstall
+        "msg_uninstall_confirm": "Soll '{}' wirklich deinstalliert werden?",
+        "msg_cannot_uninstall_source": "Kann Quelle {} nicht deinstallieren.",
+        "msg_uninstalling_pacman": "Deinstallation (pacman {}): {}",
+        "msg_uninstalling_flatpak": "Deinstallation (flatpak): {}",
+
+        # Messages - Install
+        "msg_installing_repo": "Installation (Repo/pacman): {}",
+        "msg_installing_aur": "Installation (AUR/{}): {}",
+        "msg_installing_flatpak_user": "Installation (Flatpak, user, {}): {}",
+        "msg_installing_flatpak_system": "Installation (Flatpak, system-remote {}): {}",
+        "msg_installing_flatpak_user_auto": "Installation (Flatpak, user): {}",
+        "msg_installing_flatpak_system_auto": "Installation (Flatpak, system): {}",
+
+        # Messages - Cleanup
+        "cleanup_summary_orphans": "Verwaiste Pakete entfernen",
+        "cleanup_summary_cache": "Paketcache bereinigen",
+        "cleanup_summary_flatpak": "Ungenutzte Flatpak-Runtimes löschen",
+        "cleanup_summary_aur": "AUR-Build-Cache entfernen",
+        "cleanup_summary_logs": "Systemlogs verkleinern",
+        "cleanup_no_action_selected": "Keine Aktion ausgewählt.",
+        "cleanup_confirm_question": "Folgende Aktionen werden ausgeführt:\n{}\n\nFortfahren?",
+        "cleanup_skip_orphans_missing": "pacman nicht gefunden – überspringe Entfernen verwaister Pakete.",
+        "cleanup_skip_cache_missing": "pacman nicht gefunden – überspringe Cache-Bereinigung.",
+        "cleanup_skip_flatpak_missing": "flatpak nicht gefunden – überspringe Flatpak-Bereinigung.",
+        "cleanup_skip_logs_missing": "journalctl nicht gefunden – überspringe Log-Bereinigung.",
+        "cleanup_no_action_possible": "Keine der gewählten Aktionen kann ausgeführt werden.",
+
+        # Update service tab
+        "settings_update_service_description": "Der Update-Service prüft automatisch per systemd-Timer auf neue Updates.\nVersäumte Läufe werden beim nächsten Start nachgeholt.",
+        "settings_update_service_enable": "Update-Service aktivieren",
+        "settings_update_service_check_on_boot": "Beim Systemstart prüfen",
+        "settings_update_service_interval_group": "Prüfintervall",
+        "settings_update_service_manual": "Benutzerdefiniert: alle",
+        "settings_update_service_daily": "Täglich",
+        "settings_update_service_weekly": "Wöchentlich",
+        "settings_update_service_hours_suffix": "Stunden",
+        "settings_update_service_time_label": "Uhrzeit:",
+        "settings_update_service_day_label": "Tag:",
+        "settings_update_service_weekday_monday": "Montag",
+        "settings_update_service_weekday_tuesday": "Dienstag",
+        "settings_update_service_weekday_wednesday": "Mittwoch",
+        "settings_update_service_weekday_thursday": "Donnerstag",
+        "settings_update_service_weekday_friday": "Freitag",
+        "settings_update_service_weekday_saturday": "Samstag",
+        "settings_update_service_weekday_sunday": "Sonntag",
+        "settings_update_service_apply_failed": "Update-Service konnte nicht konfiguriert werden: {}",
+        "settings_update_service_systemctl_missing": "systemctl nicht gefunden – systemd-Benutzerdienste sind erforderlich.",
+        "settings_update_service_status_unknown": "Status konnte nicht ermittelt werden.",
+        "settings_update_service_status_active": "Timer aktiv – der Service läuft derzeit.",
+        "settings_update_service_status_enabled": "Timer aktiviert – wartet auf den nächsten Lauf.",
+        "settings_update_service_status_disabled": "Timer deaktiviert.",
+
+        # Messages - Queue
+        "msg_queue_empty": "Queue ist leer.",
+        "msg_added_to_queue": "Zur Queue hinzugefügt: {} Element(e)",
+
+        # Messages - AUR
+        "msg_no_aur_helper": "Hinweis: Kein AUR-Helper konfiguriert – AUR-Suche nicht möglich.",
+        "msg_aur_helper_tip": "Tipp: Installiere 'yay' oder konfiguriere einen Helper in den Einstellungen (Ctrl+,).",
+        "msg_no_aur_helper_configured": "Kein AUR-Helper konfiguriert.\nBitte in Einstellungen einen Helper wählen (z.B. yay).",
+        "msg_aur_no_helper_skip": "AUR: Kein Helper konfiguriert – überspringe AUR-Queue.",
+        "msg_aur_details_need_helper": "AUR-Details erfordern einen AUR-Helper (siehe Einstellungen).",
+
+        # Messages - Details
+        "msg_no_details": "Keine Detail-Informationen gefunden für: {}",
+        "msg_no_details_available": "Keine Details verfügbar.",
+
+        # Messages - Flatpak
+        "msg_remotes_system_only": "Folgende Remotes existieren nur systemweit: {}\n\nFür eine Installation ohne Root kann ich sie als User-Remote hinzufügen.\nJetzt hinzufügen?",
+        "msg_could_not_add_flathub": "Fehler: Konnte 'flathub' nicht hinzufügen.",
+        "msg_flathub_verify_failed": "Fehler: 'flathub' konnte nach dem Hinzufügen nicht verifiziert werden.",
+        "msg_remote_url_unknown": "Für Remote '{}' kenne ich die URL nicht.\nBitte manuell hinzufügen:\nflatpak remote-add --user {} <URL>",
+        "msg_remote_unknown_skip": "Remote '{}' ist unbekannt. Überspringe: {}",
+        "msg_missing_remotes_manual": "Es fehlen folgende Remotes: {}\n\nBitte manuell mit 'flatpak remote-add' einrichten oder Auto-Hinzufügen in den Einstellungen aktivieren.",
+        "msg_flathub_not_configured": "Der Remote 'flathub' ist nicht eingerichtet.\n\nJetzt als User-Remote hinzufügen?",
+        "msg_flathub_added": "User-Remote 'flathub' hinzugefügt.",
+        "msg_aborted_flathub_missing": "Abgebrochen: Remote 'flathub' fehlt.",
+        "msg_missing_remotes_setup": "Es fehlen folgende Remotes: {}\nBitte mit 'flatpak remote-add ...' einrichten und erneut versuchen.",
+
+        # Search
+        "search_info_select_source": "Wähle oben eine Quelle. Suche läuft innerhalb dieser Quelle.",
+        "search_info_all": "Quelle: Alle – Suche durchsucht alle Quellen gleichzeitig.",
+        "search_info_repo": "Quelle: Offizielle Repos – Suche mit pacman -Ss",
+        "search_info_aur": "Quelle: AUR – Suche mit {} -Ss",
+        "search_info_aur_no_helper": "Quelle: AUR – Für Suche/Install wird ein AUR-Helper benötigt (siehe Einstellungen).",
+        "search_info_flatpak": "Quelle: Flatpak – Suche mit flatpak search",
+        "search_placeholder_repo": "Repo-Suche (pacman -Ss) – z. B. firefox",
+        "search_placeholder_aur": "AUR-Suche ({} -Ss) – z. B. google-chrome",
+        "search_placeholder_aur_no_helper": "AUR-Suche – (kein Helper konfiguriert)",
+        "search_placeholder_flatpak": "Flatpak-Suche (flatpak search) – z. B. firefox",
+        "msg_searching": "== Suche ({}): {} ==",
+        "msg_select_specific_source": "Bitte eine konkrete Quelle wählen (Offizielle, AUR, Flatpak).",
+
+        # Table headers
+        "table_package": "Paket",
+        "table_version": "Version",
+        "table_branch_repo": "Branch/Repo",
+        "table_remote_source": "Remote/Quelle",
+        "table_source": "Quelle",
+        "table_description": "Beschreibung",
+
+        # Tips
+        "tips_text": (
+            "• Oben Quelle wählen, Mitte zeigt installierte Pakete.\n"
+            "• Unten suchen – Ergebnisse erscheinen links. Rechts liegt die Queue.\n"
+            "• Rechtsklick öffnet Aktionen (Deinstallieren, Details, Installieren/Queue).\n"
+            "• Die Konsole ist ein echtes PTY: Ctrl+C = SIGINT, Shift+Ctrl+C/V = Kopieren/Einfügen.\n"
+            "• Einstellungen: Ctrl+, für AUR-Helper, Root-Methode, etc."
+        ),
+
+        # Settings dialog
+        "settings_dialog_title": "WrapPac - Einstellungen",
+        "settings_tab_aur": "AUR-Helper",
+        "settings_tab_root": "Root-Methode",
+        "settings_tab_pacman": "Pacman",
+        "settings_tab_reflector": "Reflector",
+        "settings_tab_flatpak": "Flatpak",
+        "settings_tab_cleanup": "Systempflege",
+        "settings_tab_update_service": "Update-Service",
+        "settings_tab_language": "Sprache",
+        "settings_btn_reset": "Zurücksetzen",
+        "settings_btn_save": "Speichern",
+
+        # AUR tab
+        "settings_aur_info": "Der AUR-Helper wird für die Suche und Installation von AUR-Paketen verwendet.\nFalls mehrere installiert sind, kannst du hier einen bevorzugten wählen.",
+        "settings_aur_auto": "Automatisch erkennen (empfohlen)",
+        "settings_aur_yay": "yay verwenden",
+        "settings_aur_paru": "paru verwenden",
+        "settings_aur_pikaur": "pikaur verwenden",
+        "settings_aur_custom": "Benutzerdefiniert:",
+        "settings_aur_detected": "Erkannte AUR-Helper",
+        "settings_aur_none_found": "✗ Kein AUR-Helper gefunden",
+        "settings_aur_install_tip": "Tipp: Installiere 'yay' für AUR-Unterstützung:\nsudo pacman -S --needed git base-devel && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si",
+
+        # Root tab
+        "settings_root_info": "Für Installationen und System-Updates werden Root-Rechte benötigt.\nWähle, wie WrapPac nach Root-Rechten fragen soll.",
+        "settings_root_auto": "Automatisch (sudo -> doas)",
+        "settings_root_sudo": "sudo (Terminal-Passwort)",
+        "settings_root_doas": "doas (minimalistisch)",
+        "settings_root_always_ask": "Immer vor Root-Operationen explizit bestätigen",
+        "settings_root_available": "Verfügbare Methoden",
+        "settings_root_not_installed": "✗ {} nicht installiert",
+        "settings_root_security_note": "ℹ️ WrapPac nutzt KEINE Daemons mit permanenten Root-Rechten.\nRoot wird nur für einzelne Operationen angefordert (z.B. pacman -S).",
+
+        # Pacman tab
+        "settings_pacman_info": "Konfiguriere das Verhalten von pacman bei Updates und Deinstallationen.",
+        "settings_pacman_uninstall_group": "Deinstallation",
+        "settings_pacman_flags_label": "Standard-Flags für 'pacman -R'",
+        "settings_pacman_flags_rns": "-Rns (empfohlen: Paket + ungenutzte Deps + Config-Dateien)",
+        "settings_pacman_flags_rn": "-Rn (Paket + Config-Dateien, Deps behalten)",
+        "settings_pacman_flags_rs": "-Rs (Paket + ungenutzte Deps, Config behalten)",
+        "settings_pacman_flags_r": "-R (nur Paket, alles andere behalten)",
+        "settings_pacman_show_deps": "Vor Deinstallation zeigen, welche Pakete mit entfernt werden",
+        "settings_pacman_update_group": "Updates & Installation",
+        "settings_pacman_noconfirm": "--noconfirm verwenden (nicht empfohlen, da du so nicht in den Installationsprozess eingreifen kannst)",
+        "settings_pacman_noconfirm_hint": "Empfohlen: Ohne --noconfirm siehst du was installiert wird und kannst abbrechen.",
+        "settings_pacman_auto_refresh": "Nach Installation/Deinstallation Paketliste automatisch aktualisieren",
+        "settings_pacman_refresh_delay": "Verzögerung:",
+        "settings_pacman_note": "ℹ️ WrapPac ruft pacman direkt auf - keine Abstraktionsschicht.\nAlle pacman-Hooks und -Konfigurationen bleiben aktiv.",
+        "settings_reflector_info": "Reflector aktualisiert die Mirrorliste der Arch Linux Repositorien.\nLege hier fest, wie die Schaltfläche im Hauptfenster arbeitet.",
+        "settings_reflector_available": "✓ Reflector ist installiert",
+        "settings_reflector_missing": "✗ Reflector ist nicht installiert (pacman -S reflector).",
+        "settings_reflector_command_group": "Befehlsoptionen",
+        "settings_reflector_args": "Zusätzliche Argumente",
+        "settings_reflector_save_path": "Mirrorliste speichern unter",
+        "settings_reflector_backup_enable": "Vorherige Mirrorliste sichern",
+        "settings_reflector_backup_path": "Backup-Datei",
+        "settings_reflector_args_invalid": "Ungültige Reflector-Argumente: {}\nBitte korrigieren und erneut versuchen.",
+        "settings_reflector_hint": "Tipp: Mit '--latest 10 --sort rate' nutzt reflector die schnellsten, aktuellen Spiegel.\nPasse Pfade an deine Systemkonfiguration an.",
+
+        # Flatpak tab
+        "settings_flatpak_info": "Flatpak-Apps können system- oder benutzerweit installiert werden.\nUser-Installation ist empfohlen (keine Root-Rechte nötig).",
+        "settings_flatpak_scope_group": "Installations-Scope",
+        "settings_flatpak_scope_label": "Standard-Scope für Installationen",
+        "settings_flatpak_scope_user": "--user (empfohlen: nur für aktuellen Benutzer)",
+        "settings_flatpak_scope_system": "--system (systemweit, benötigt Root)",
+        "settings_cleanup_info": "Hier stellst du ein, wie die Aufräumfunktionen arbeiten. Die eigentliche Ausführung startest du im Hauptfenster.",
+        "settings_cleanup_keep_versions": "Anzahl alter Paketversionen im Cache behalten",
+        "settings_cleanup_keep_versions_suffix": " Version(en)",
+        "settings_cleanup_log_age": "Systemlogs behalten für",
+        "settings_cleanup_log_age_suffix": " Tag(e)",
+        "settings_cleanup_hint": "Hinweis: Einige Aktionen benötigen Root-Rechte. WrapPac fragt vorher nach Bestätigung und verdeckt Passwörter.",
+        "settings_flatpak_remotes_group": "Remotes",
+        "settings_flatpak_auto_add": "Fehlende Remotes automatisch hinzufügen (z.B. Flathub)",
+        "settings_flatpak_auto_add_hint": "Wenn aktiviert, wird Flathub bei Bedarf automatisch als User-Remote hinzugefügt.",
+        "settings_flatpak_configured": "Konfigurierte Remotes",
+        "settings_flatpak_remotes_table_scope": "Scope",
+        "settings_flatpak_remotes_table_name": "Name",
+        "settings_flatpak_remotes_table_url": "URL",
+        "settings_flatpak_remotes_add": "Remote hinzufügen",
+        "settings_flatpak_remotes_remove": "Remote entfernen",
+        "settings_flatpak_remotes_refresh": "Liste aktualisieren",
+        "settings_flatpak_remotes_empty": "Keine Remotes gefunden.",
+        "settings_flatpak_remote_add_title": "Flatpak-Remote hinzufügen",
+        "settings_flatpak_remote_name": "Name",
+        "settings_flatpak_remote_url": "URL",
+        "settings_flatpak_remote_scope": "Gültigkeit",
+        "settings_flatpak_remote_scope_user": "Benutzer",
+        "settings_flatpak_remote_scope_system": "System",
+        "settings_flatpak_remote_required": "Name und URL dürfen nicht leer sein.",
+        "settings_flatpak_remote_add_error": "Konnte Remote nicht hinzufügen: {}",
+        "settings_flatpak_remote_delete_confirm": "Remote '{}' wirklich löschen?",
+        "settings_flatpak_remote_delete_error": "Konnte Remote nicht löschen: {}",
+        "settings_flatpak_query_failed": "Konnte Remotes nicht abfragen",
+        "settings_flatpak_not_installed": "✗ Flatpak nicht installiert",
+
+        # Language tab
+        "settings_lang_info": "Wähle die Sprache der Benutzeroberfläche.\nÄnderungen werden nach einem Neustart der Anwendung aktiv.",
+        "settings_lang_auto": "Automatisch (System-Sprache)",
+        "settings_lang_de": "Deutsch",
+        "settings_lang_en": "English",
+        "settings_lang_system": "System-Sprache",
+        "settings_lang_detected": "Erkannt: {}",
+        "settings_lang_auto_selection": "→ Automatische Auswahl: {}",
+        "settings_lang_current": "Aktuelle Einstellung",
+        "settings_lang_active": "Derzeit aktiv: {}",
+        "settings_lang_restart_note": "ℹ️ Nach dem Ändern der Sprache muss WrapPac neu gestartet werden,\ndamit alle Texte in der neuen Sprache erscheinen.",
+
+        # Reset dialog
+        "settings_reset_title": "Zurücksetzen",
+        "settings_reset_message": "Alle Einstellungen auf Standard zurücksetzen?",
+        "settings_reset_done_title": "Zurückgesetzt",
+        "settings_reset_done_message": "Einstellungen wurden auf Standard zurückgesetzt.",
+    },
+
+    "en": {
+        # Main window
+        "app_title": "WrapPac – GUI for pacman/AUR/Flatpak (PTY Console, async Refresh)",
+        "btn_all": "All",
+        "btn_official": "Official",
+        "btn_aur": "AUR",
+        "btn_flatpak": "Flatpak",
+        "btn_refresh": "Refresh List",
+        "btn_system_update": "System Update",
+        "btn_run_reflector": "Run Reflector",
+        "btn_system_cleanup": "System Cleanup",
+        "search_placeholder": "Search…",
+        "installed_filter_placeholder": "Filter installed packages…",
+        "btn_search": "Search",
+        "install_queue": "Install Queue",
+        "btn_install_queue": "Install Queue",
+        "btn_remove_from_queue": "Remove from Queue",
+        "btn_clear_queue": "Clear Queue",
+
+        # Terminal
+        "terminal_placeholder": "Interactive PTY console – type here (Shift+Ctrl+C to copy, Shift+Ctrl+V to paste).",
+
+        # Menus
+        "menu_actions": "Actions",
+        "menu_settings": "Settings",
+        "menu_help": "Help",
+        "action_refresh": "Refresh List",
+        "action_settings": "Settings…",
+        "action_tips": "Tips",
+
+        # Dialogs - General
+        "btn_start": "Start",
+        "btn_cancel": "Cancel",
+        "btn_ok": "OK",
+        "btn_yes": "Yes",
+        "btn_no": "No",
+        "dialog_confirm": "Confirm",
+        "dialog_hint": "Hint",
+        "dialog_aur": "AUR",
+        "unknown": "unknown",
+
+        # Update Dialog
+        "dialog_update_title": "System Update",
+        "dialog_update_available": "Available Updates:",
+        "dialog_update_official": "Official Repos",
+        "dialog_update_aur": "AUR",
+        "dialog_update_flatpak": "Flatpak",
+        "dialog_update_preview": "Preview only (Dry-run)",
+        "dialog_update_no_helper": "(no helper configured)",
+        "dialog_update_process_running": "A process is already running in the terminal.\nPlease wait until it finishes.",
+        "dialog_update_no_source": "No update source selected.",
+        "updates": "updates",
+        "dialog_update_reflector_missing": "Reflector could not be found. Install 'reflector' or adjust the Reflector tab in the settings.",
+        "cleanup_dialog_intro": "Select which areas should be cleaned.",
+        "cleanup_dialog_hint": "You can fine-tune the cleanup behaviour in Settings → System Maintenance.",
+        "cleanup_option_remove_orphans": "Remove orphaned packages (pacman -Qtdq / -Rns)",
+        "cleanup_option_clean_cache": "Clean package cache (paccache)",
+        "cleanup_option_remove_flatpak_runtimes": "Remove unused Flatpak runtimes",
+        "cleanup_option_clear_aur_cache": "Delete AUR build cache",
+        "cleanup_option_clean_logs": "Vacuum old system logs",
+        "dialog_cleanup_title": "System Maintenance",
+        "dialog_password_title": "Password required",
+        "dialog_password_prompt": "Please enter your {tool} password to continue.",
+
+        # Details Dialogs
+        "dialog_details_title": "Details – {}",
+        "dialog_details_flatpak": "Details (Flatpak) – {}",
+        "dialog_details_repo": "Details (Repo) – {}",
+        "dialog_details_aur": "Details (AUR) – {}",
+        "dialog_unknown_source": "Unknown Source",
+
+        # Flatpak Dialogs
+        "dialog_add_remote_as_user": "Add remote as user?",
+        "dialog_remote_url_needed": "Remote URL needed",
+        "dialog_remote_missing": "Remote missing",
+        "dialog_remotes_missing": "Remote(s) missing",
+
+        # Context menu
+        "ctx_show_details": "Show Details",
+        "ctx_uninstall": "Uninstall",
+        "ctx_uninstall_item": "Uninstall: {}",
+        "ctx_install": "Install",
+        "ctx_add_to_queue": "Add to Queue",
+
+        # Messages - General
+        "msg_loading": "Already loading …",
+        "msg_loaded": "Loaded: {} entries",
+        "msg_package_list_loading": "== Loading package lists (async) ==",
+        "status_loading_packages": "Loading packages …",
+        "status_checking_updates": "Checking for updates …",
+        "msg_settings_saved": "Settings saved.",
+        "update_service_tray_title": "WrapPac Updates",
+        "update_service_tray_message": "{} updates available",
+        "update_service_tray_details": "Pacman: {}, AUR: {}, Flatpak: {}",
+        "update_service_tray_tooltip": "{} updates available",
+        "update_service_tray_open": "Open WrapPac",
+        "update_service_tray_quit": "Dismiss notification",
+        "msg_process_running": "A process is already running.",
+        "single_instance_error": "WrapPac could not acquire the single-instance lock. Please try again.",
+        "msg_update_check_start": "== Checking for available updates ==",
+        "msg_no_root_method": "Error: No root method available (see Settings)",
+        "msg_updates_complete": "== Updates complete ==",
+        "msg_cleanup_start": "== Preparing system maintenance ==",
+        "msg_cleanup_complete": "== System maintenance finished ==",
+        "msg_cleanup_orphans_none": "No orphaned packages found.",
+        "msg_cleanup_cache_fallback": "paccache not available – falling back to pacman -Sc.",
+        "msg_cleanup_aur_cleaning": "Cleaning AUR build cache:",
+        "msg_cleanup_aur_done": "AUR build cache cleaned.",
+        "msg_password_submitted": "Password submitted securely.",
+        "msg_password_cancelled": "Password entry cancelled.",
+        "msg_provider_errors_header": "⚠️ Issues while running external commands:",
+        "msg_command_failed_exit": "• {} – exit code {}",
+        "msg_command_failed_not_found": "• {} – command not found.",
+        "msg_command_failed_exception": "• {} – exception: {}",
+        "msg_command_failed_args": "• {} – invalid arguments: {}",
+        "msg_command_failed_generic": "• {} – {}",
+        "msg_reflector_unavailable": "Could not launch reflector.",
+        "msg_reflector_start": "== Running reflector ==",
+        "msg_reflector_complete": "== Reflector finished ==",
+        "tooltip_reflector_missing": "Reflector is not installed.",
+        "tooltip_reflector_ready": "Runs reflector to refresh the mirror list using your configuration.",
+
+        # Messages - Uninstall
+        "msg_uninstall_confirm": "Really uninstall '{}'?",
+        "msg_cannot_uninstall_source": "Cannot uninstall source {}.",
+        "msg_uninstalling_pacman": "Uninstalling (pacman {}): {}",
+        "msg_uninstalling_flatpak": "Uninstalling (flatpak): {}",
+
+        # Messages - Install
+        "msg_installing_repo": "Installing (Repo/pacman): {}",
+        "msg_installing_aur": "Installing (AUR/{}): {}",
+        "msg_installing_flatpak_user": "Installing (Flatpak, user, {}): {}",
+        "msg_installing_flatpak_system": "Installing (Flatpak, system-remote {}): {}",
+        "msg_installing_flatpak_user_auto": "Installing (Flatpak, user): {}",
+        "msg_installing_flatpak_system_auto": "Installing (Flatpak, system): {}",
+
+        # Messages - Cleanup
+        "cleanup_summary_orphans": "Remove orphaned packages",
+        "cleanup_summary_cache": "Clean package cache",
+        "cleanup_summary_flatpak": "Remove unused Flatpak runtimes",
+        "cleanup_summary_aur": "Clear AUR build cache",
+        "cleanup_summary_logs": "Vacuum system logs",
+        "cleanup_no_action_selected": "No action selected.",
+        "cleanup_confirm_question": "The following actions will be executed:\n{}\n\nContinue?",
+        "cleanup_skip_orphans_missing": "pacman not found – skipping orphan removal.",
+        "cleanup_skip_cache_missing": "pacman not found – skipping cache cleanup.",
+        "cleanup_skip_flatpak_missing": "flatpak not found – skipping Flatpak cleanup.",
+        "cleanup_skip_logs_missing": "journalctl not found – skipping log cleanup.",
+        "cleanup_no_action_possible": "None of the selected actions can be executed.",
+
+        # Update service tab
+        "settings_update_service_description": "The update service uses a systemd timer to look for new updates automatically.\nMissed runs are triggered on the next login.",
+        "settings_update_service_enable": "Enable update service",
+        "settings_update_service_check_on_boot": "Check on system start",
+        "settings_update_service_interval_group": "Check interval",
+        "settings_update_service_manual": "Custom interval: every",
+        "settings_update_service_daily": "Daily",
+        "settings_update_service_weekly": "Weekly",
+        "settings_update_service_hours_suffix": "hours",
+        "settings_update_service_time_label": "Time:",
+        "settings_update_service_day_label": "Day:",
+        "settings_update_service_weekday_monday": "Monday",
+        "settings_update_service_weekday_tuesday": "Tuesday",
+        "settings_update_service_weekday_wednesday": "Wednesday",
+        "settings_update_service_weekday_thursday": "Thursday",
+        "settings_update_service_weekday_friday": "Friday",
+        "settings_update_service_weekday_saturday": "Saturday",
+        "settings_update_service_weekday_sunday": "Sunday",
+        "settings_update_service_apply_failed": "Could not configure the update service: {}",
+        "settings_update_service_systemctl_missing": "systemctl not found – systemd user services are required.",
+        "settings_update_service_status_unknown": "Unable to determine service status.",
+        "settings_update_service_status_active": "Timer active – the service is currently running.",
+        "settings_update_service_status_enabled": "Timer enabled – waiting for the next run.",
+        "settings_update_service_status_disabled": "Timer disabled.",
+
+        # Messages - Queue
+        "msg_queue_empty": "Queue is empty.",
+        "msg_added_to_queue": "Added to queue: {} item(s)",
+
+        # Messages - AUR
+        "msg_no_aur_helper": "Note: No AUR helper configured – AUR search not available.",
+        "msg_aur_helper_tip": "Tip: Install 'yay' or configure a helper in Settings (Ctrl+,).",
+        "msg_no_aur_helper_configured": "No AUR helper configured.\nPlease select a helper in Settings (e.g. yay).",
+        "msg_aur_no_helper_skip": "AUR: No helper configured – skipping AUR queue.",
+        "msg_aur_details_need_helper": "AUR details require an AUR helper (see Settings).",
+
+        # Messages - Details
+        "msg_no_details": "No detail information found for: {}",
+        "msg_no_details_available": "No details available.",
+
+        # Messages - Flatpak
+        "msg_remotes_system_only": "The following remotes exist only system-wide: {}\n\nFor installation without root, I can add them as user remotes.\nAdd now?",
+        "msg_could_not_add_flathub": "Error: Could not add 'flathub'.",
+        "msg_flathub_verify_failed": "Error: 'flathub' could not be verified after adding.",
+        "msg_remote_url_unknown": "Unknown URL for remote '{}'.\nPlease add manually:\nflatpak remote-add --user {} <URL>",
+        "msg_remote_unknown_skip": "Remote '{}' is unknown. Skipping: {}",
+        "msg_missing_remotes_manual": "The following remotes are missing: {}\n\nPlease set up manually with 'flatpak remote-add' or enable auto-add in Settings.",
+        "msg_flathub_not_configured": "The remote 'flathub' is not configured.\n\nAdd as user remote now?",
+        "msg_flathub_added": "User remote 'flathub' added.",
+        "msg_aborted_flathub_missing": "Aborted: Remote 'flathub' missing.",
+        "msg_missing_remotes_setup": "The following remotes are missing: {}\nPlease set up with 'flatpak remote-add ...' and try again.",
+
+        # Search
+        "search_info_select_source": "Select a source above. Search runs within that source.",
+        "search_info_all": "Source: All – Searches across every source at once.",
+        "search_info_repo": "Source: Official Repos – Search with pacman -Ss",
+        "search_info_aur": "Source: AUR – Search with {} -Ss",
+        "search_info_aur_no_helper": "Source: AUR – An AUR helper is required for search/install (see Settings).",
+        "search_info_flatpak": "Source: Flatpak – Search with flatpak search",
+        "search_placeholder_repo": "Repo search (pacman -Ss) – e.g. firefox",
+        "search_placeholder_aur": "AUR search ({} -Ss) – e.g. google-chrome",
+        "search_placeholder_aur_no_helper": "AUR search – (no helper configured)",
+        "search_placeholder_flatpak": "Flatpak search (flatpak search) – e.g. firefox",
+        "msg_searching": "== Search ({}): {} ==",
+        "msg_select_specific_source": "Please select a specific source (Official, AUR, Flatpak).",
+
+        # Table Headers
+        "table_package": "Package",
+        "table_version": "Version",
+        "table_branch_repo": "Branch/Repo",
+        "table_remote_source": "Remote/Source",
+        "table_source": "Source",
+        "table_description": "Description",
+
+        # Tips
+        "tips_text": (
+            "• Select source at top, middle shows installed packages.\n"
+            "• Search at bottom – results appear on left. Queue is on the right.\n"
+            "• Right-click opens actions (Uninstall, Details, Install/Queue).\n"
+            "• The console is a real PTY: Ctrl+C = SIGINT, Shift+Ctrl+C/V = Copy/Paste.\n"
+            "• Settings: Ctrl+, for AUR-Helper, Root method, etc."
+        ),
+
+        # Settings dialog
+        "settings_dialog_title": "WrapPac - Settings",
+        "settings_tab_aur": "AUR Helper",
+        "settings_tab_root": "Root Method",
+        "settings_tab_pacman": "Pacman",
+        "settings_tab_reflector": "Reflector",
+        "settings_tab_flatpak": "Flatpak",
+        "settings_tab_cleanup": "System Maintenance",
+        "settings_tab_update_service": "Update Service",
+        "settings_tab_language": "Language",
+        "settings_btn_reset": "Reset",
+        "settings_btn_save": "Save",
+
+        # AUR tab
+        "settings_aur_info": "The AUR helper is used for searching and installing AUR packages.\nIf multiple are installed, you can choose a preferred one here.",
+        "settings_aur_auto": "Auto-detect (recommended)",
+        "settings_aur_yay": "Use yay",
+        "settings_aur_paru": "Use paru",
+        "settings_aur_pikaur": "Use pikaur",
+        "settings_aur_custom": "Custom:",
+        "settings_aur_detected": "Detected AUR Helpers",
+        "settings_aur_none_found": "✗ No AUR helper found",
+        "settings_aur_install_tip": "Tip: Install 'yay' for AUR support:\nsudo pacman -S --needed git base-devel && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si",
+
+        # Root tab
+        "settings_root_info": "Root privileges are required for installations and system updates.\nChoose how WrapPac should request root access.",
+        "settings_root_auto": "Automatic (sudo -> doas)",
+        "settings_root_sudo": "sudo (terminal password)",
+        "settings_root_doas": "doas (minimalist)",
+        "settings_root_always_ask": "Always confirm explicitly before root operations",
+        "settings_root_available": "Available Methods",
+        "settings_root_not_installed": "✗ {} not installed",
+        "settings_root_security_note": "ℹ️ WrapPac does NOT use daemons with permanent root privileges.\nRoot is only requested for individual operations (e.g. pacman -S).",
+
+        # Pacman tab
+        "settings_pacman_info": "Configure pacman behavior for updates and uninstalls.",
+        "settings_pacman_uninstall_group": "Uninstall",
+        "settings_pacman_flags_label": "Default flags for 'pacman -R'",
+        "settings_pacman_flags_rns": "-Rns (recommended: package + unused deps + config files)",
+        "settings_pacman_flags_rn": "-Rn (package + config files, keep deps)",
+        "settings_pacman_flags_rs": "-Rs (package + unused deps, keep config)",
+        "settings_pacman_flags_r": "-R (package only, keep everything else)",
+        "settings_pacman_show_deps": "Show which packages will be removed before uninstall",
+        "settings_pacman_update_group": "Updates & Installation",
+        "settings_pacman_noconfirm": "Use --noconfirm (not recommended because you cannot intervene during installation)",
+        "settings_pacman_noconfirm_hint": "Recommended: Without --noconfirm you see what will be installed and can abort.",
+        "settings_pacman_auto_refresh": "Automatically refresh package list after install/uninstall",
+        "settings_pacman_refresh_delay": "Delay:",
+        "settings_pacman_note": "ℹ️ WrapPac calls pacman directly - no abstraction layer.\nAll pacman hooks and configurations remain active.",
+        "settings_reflector_info": "Reflector updates the Arch Linux mirror list.\nConfigure how the button in the main window should behave.",
+        "settings_reflector_available": "✓ Reflector is installed",
+        "settings_reflector_missing": "✗ Reflector is not installed (pacman -S reflector).",
+        "settings_reflector_command_group": "Command options",
+        "settings_reflector_args": "Additional arguments",
+        "settings_reflector_save_path": "Save mirror list to",
+        "settings_reflector_backup_enable": "Create a backup of the previous mirror list",
+        "settings_reflector_backup_path": "Backup file",
+        "settings_reflector_args_invalid": "Invalid Reflector arguments: {}\nPlease fix them before saving.",
+        "settings_reflector_hint": "Tip: '--latest 10 --sort rate' keeps the newest and fastest mirrors.\nAdjust paths to match your setup.",
+
+        # Flatpak tab
+        "settings_flatpak_info": "Flatpak apps can be installed system-wide or per-user.\nUser installation is recommended (no root required).",
+        "settings_flatpak_scope_group": "Installation Scope",
+        "settings_flatpak_scope_label": "Default scope for installations",
+        "settings_flatpak_scope_user": "--user (recommended: for current user only)",
+        "settings_flatpak_scope_system": "--system (system-wide, requires root)",
+        "settings_cleanup_info": "Configure how cleanup tasks behave. Launch the cleanup itself from the main window.",
+        "settings_cleanup_keep_versions": "Keep this many old package versions in cache",
+        "settings_cleanup_keep_versions_suffix": " version(s)",
+        "settings_cleanup_log_age": "Keep system logs for",
+        "settings_cleanup_log_age_suffix": " day(s)",
+        "settings_cleanup_hint": "Note: Some actions require root privileges. WrapPac asks for confirmation and masks passwords.",
+        "settings_flatpak_remotes_group": "Remotes",
+        "settings_flatpak_auto_add": "Automatically add missing remotes (e.g. Flathub)",
+        "settings_flatpak_auto_add_hint": "If enabled, Flathub will be automatically added as user remote when needed.",
+        "settings_flatpak_configured": "Configured Remotes",
+        "settings_flatpak_remotes_table_scope": "Scope",
+        "settings_flatpak_remotes_table_name": "Name",
+        "settings_flatpak_remotes_table_url": "URL",
+        "settings_flatpak_remotes_add": "Add Remote",
+        "settings_flatpak_remotes_remove": "Remove Remote",
+        "settings_flatpak_remotes_refresh": "Refresh List",
+        "settings_flatpak_remotes_empty": "No remotes found.",
+        "settings_flatpak_remote_add_title": "Add Flatpak Remote",
+        "settings_flatpak_remote_name": "Name",
+        "settings_flatpak_remote_url": "URL",
+        "settings_flatpak_remote_scope": "Scope",
+        "settings_flatpak_remote_scope_user": "User",
+        "settings_flatpak_remote_scope_system": "System",
+        "settings_flatpak_remote_required": "Name and URL must not be empty.",
+        "settings_flatpak_remote_add_error": "Could not add remote: {}",
+        "settings_flatpak_remote_delete_confirm": "Really delete remote '{}' ?",
+        "settings_flatpak_remote_delete_error": "Could not delete remote: {}",
+        "settings_flatpak_query_failed": "Could not query remotes",
+        "settings_flatpak_not_installed": "✗ Flatpak not installed",
+
+        # Language tab
+        "settings_lang_info": "Choose the user interface language.\nChanges will take effect after restarting the application.",
+        "settings_lang_auto": "Automatic (system language)",
+        "settings_lang_de": "German",
+        "settings_lang_en": "English",
+        "settings_lang_system": "System Language",
+        "settings_lang_detected": "Detected: {}",
+        "settings_lang_auto_selection": "→ Automatic selection: {}",
+        "settings_lang_current": "Current Setting",
+        "settings_lang_active": "Currently active: {}",
+        "settings_lang_restart_note": "ℹ️ After changing the language, WrapPac must be restarted\nfor all texts to appear in the new language.",
+
+        # Reset dialog
+        "settings_reset_title": "Reset",
+        "settings_reset_message": "Reset all settings to defaults?",
+        "settings_reset_done_title": "Reset Complete",
+        "settings_reset_done_message": "Settings have been reset to defaults.",
+    },
+}
+
+def tr(key: str, *args, **kwargs) -> str:
+    """Translate a key into the current language."""
+
+    lang = settings.get_language()
+    text = TRANSLATIONS.get(lang, {}).get(key, key)
+
+    if args or kwargs:
+        try:
+            return text.format(*args, **kwargs)
+        except Exception:
+            # Bei Format-Fehlern: Text ohne Formatierung zurückgeben
+            return text
+
+    return text
