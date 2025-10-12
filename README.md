@@ -41,20 +41,56 @@ It's for users who value Arch's simplicity and control, but still want a clear o
 | Transaction logic | Library-level transaction handling     | Identical to manual terminal commands                             |
 | Privilege model   | Varies (some use persistent daemons)   | No persistent root access — uses `sudo`/`doas` only when needed   |
 | Output visibility | GUI-formatted, abstracted messages     | Raw PTY terminal showing live, unfiltered command output          |
-| Update checks     | Integrated background services         | Manual checks triggered from the main window |
+| Update checks     | Integrated background services         | Optional systemd timer with tray notifications |
 | Configuration     | Managed through application settings   | Uses system `pacman.conf` and all configured hooks                |
 
 ---
 
 ## ✨ Features
 
+### Core Functionality
 * **Unified package view** — combines results from `pacman -Qn`, `pacman -Qm`, and `flatpak list`
 * **Context-aware actions** — uninstall packages using the correct backend (`pacman`, `yay`, `paru`, or `flatpak`)
-* **Integrated PTY terminal** — live output with full keyboard control (`Ctrl+C`, `Shift+Ctrl+C/V`, etc.)
-* **Non-blocking UI** — background threads keep the interface responsive
-* **Mirror optimization** — integrated Reflector support with automatic backup
-* **Cleanup helpers** — remove cache files, orphaned packages, and AUR build artifacts
+* **Integrated PTY terminal** — live output with keyboard control.
+* **Non-blocking UI** — background threads keep the interface responsive during long operations
+
+### Update Management
+* **Optional systemd timer** — automatic update checks with configurable intervals:
+  - Custom intervals (every N hours)
+  - Daily at a specific time
+  - Weekly on a specific day and time
+  - Optional check on system boot
+* **System tray notifications** — discrete notifications when updates are available
+* **Single-instance enforcement** — prevents multiple windows, allows `--show-updates` flag for direct access
+
+### System Maintenance
+* **Mirror optimization** — integrated Reflector support with:
+  - Customizable arguments
+  - Automatic backup of current mirrorlist
+  - Protocol filtering (prefers HTTPS when rsync unavailable)
+* **Cleanup helpers** — remove:
+  - Orphaned packages (`pacman -Qtdq`)
+  - Package cache (configurable retention via `paccache`)
+  - Unused Flatpak runtimes
+  - AUR build caches (yay/paru/pikaur/etc.)
+  - Old system logs (`journalctl --vacuum-time`)
+
+### Flatpak Integration
+* **Remote management** — add/remove Flatpak remotes directly from settings
+* **Automatic remote setup** — optional auto-add for missing remotes (e.g., Flathub)
+* **Scope control** — choose between user (`--user`) and system (`--system`) installations
+* **Intelligent remote detection** — automatically determines installation scope
+
+### User Experience
 * **Multilingual** — full support for English and German with auto-detection
+* **Configurable behavior** — extensive settings for:
+  - AUR helper selection (auto-detect or manual)
+  - Root method (`sudo` vs `doas`)
+  - Pacman flags for removal (`-Rns`, `-Rn`, `-Rs`, `-R`)
+  - Terminal appearance (font, theme)
+  - Auto-refresh after operations
+* **Install queue** — batch multiple package installations
+* **Comprehensive error reporting** — shows failed commands with exit codes and stderr
 
 ---
 
@@ -99,8 +135,47 @@ sudo pacman -Rns wrappac-git
 * `flatpak` — for Flatpak management
 * `sudo` or `opendoas` — for privilege escalation
 * `reflector` — to refresh mirrors
+* `systemd` — for the optional update service timer
 
 All dependencies are handled through the PKGBUILD.
+
+---
+
+## 🚀 Usage
+
+### Basic Workflow
+
+1. **Browse installed packages** — filter by source (All/Official/AUR/Flatpak)
+2. **Search for new packages** — select a source, search, add to queue or install directly
+3. **System updates** — click "System Update" to check and apply updates across all sources
+4. **System maintenance** — use "System Cleanup" to remove orphans, clean caches, etc.
+
+### Command-Line Options
+
+```bash
+wrappac                    # Normal start
+wrappac --show-updates     # Open directly to update dialog
+wrappac --tray-mode        # Start minimized (for systemd timer)
+wrappac --run-update-service  # Internal: check updates and show tray notification
+```
+
+### Update Service Setup
+
+Enable automatic update checks in **Settings → Update Service**:
+
+1. Check "Enable update service"
+2. Choose interval (manual hours, daily, or weekly)
+3. Optionally enable "Check on system start"
+4. Click Save
+
+This creates a systemd user timer (`~/.config/systemd/user/wrappac-update.timer`) that runs in the background and shows tray notifications when updates are available.
+
+**Checking service status:**
+
+```bash
+systemctl --user status wrappac-update.timer
+systemctl --user list-timers  # See next scheduled run
+```
 
 ---
 
@@ -133,7 +208,7 @@ Manage Flatpak remotes and user/system installation scopes.
 
 ### Settings: Language
 
-Switch between English or German.
+Switch between English and German — auto-detects system locale.
 ![Language Settings](screenshots/settings_dialog_language.png)
 
 ### System Maintenance
@@ -143,15 +218,43 @@ Clean caches, remove orphans, and keep your system tidy.
 
 ---
 
-## 🤝 Contributing
+## ⚙️ Configuration
 
-Contributions, bug reports, and feature requests are welcome! Feel free to open issues or submit pull requests on GitHub.
+Settings are stored in `~/.config/wrappac/settings.json`. The settings dialog provides a GUI for all options:
+
+### Categories
+
+- **AUR Helper** — auto-detect or manually select yay/paru/pikaur
+- **Root Method** — choose between sudo and doas
+- **Pacman** — configure removal flags, --noconfirm usage, auto-refresh
+- **Reflector** — mirror update arguments and backup settings
+- **Flatpak** — default scope, remote management, auto-add behavior
+- **System Maintenance** — cache retention, log age limits
+- **Update Service** — timer configuration and boot-time checks
+- **Language** — UI language (English/German)
 
 ---
 
-## 📄 License
+## 🛡️ Security
 
-WrapPac is released under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+WrapPac follows these security principles:
+
+* **No persistent root daemons** — root access is only requested for individual operations
+* **Transparent command execution** — every command is shown in the PTY terminal before execution
+* **Password masking** — passwords are entered in secure dialogs, never echoed in the terminal
+* **Respect system configuration** — uses your existing `sudoers`/`doas.conf` rules
+* **No phone-home** — completely offline except for package operations you initiate
+
+---
+
+## 🗺️ Roadmap
+
+Potential future features (not promised):
+
+- [ ] Downgrade packages to previous versions
+- [ ] AUR package build inspection before installation
+- [ ] Package pinning (exclude from updates)
+- [ ] Import/export installed package lists
 
 ---
 
