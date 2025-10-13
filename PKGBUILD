@@ -22,7 +22,7 @@ makedepends=(
   'git'
 )
 
-source=("git+${url}.git#branch=main")
+source=("git+https://${url}.git#branch=main")
 sha256sums=('SKIP')
 
 pkgver() {
