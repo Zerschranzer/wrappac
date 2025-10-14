@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLineEdit, QTableView, QMenu,
     QMessageBox, QDialog, QTableWidget, QTableWidgetItem, QHeaderView,
     QLabel, QListWidget, QListWidgetItem, QSplitter, QStyle, QCheckBox, QProgressBar,
-    QDialogButtonBox, QSystemTrayIcon
+    QDialogButtonBox, QSystemTrayIcon, QPlainTextEdit
 )
 
 from models import PackageModel, PackageItem
