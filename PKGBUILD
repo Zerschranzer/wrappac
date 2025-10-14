@@ -10,7 +10,6 @@ license=('MIT')
 depends=(
   'python'
   'pyside6'
-  'python-pexpect'
   'pacman-contrib'
   'hicolor-icon-theme'
 )
@@ -31,7 +30,6 @@ pkgver() {
   local ver
   ver="$(git describe --tags --long 2>/dev/null || true)"
   if [[ -n "$ver" ]]; then
-    # "v" vorne entfernen und "-" in "." umwandeln
     ver="${ver#v}"
     ver="${ver//-/.}"
     printf '%s\n' "$ver"
