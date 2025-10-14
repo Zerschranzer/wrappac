@@ -33,6 +33,9 @@ class Settings:
         "terminal_font_family": "Monospace",
         "terminal_font_size": 10,
         "terminal_theme": "dark",
+        "notify_updates_available": True,
+        "notify_install_complete": True,
+        "notify_errors": True,
         "auto_refresh_after_install": True,
         "refresh_delay_ms": 400,
 

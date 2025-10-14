@@ -5,11 +5,14 @@ import subprocess
 import shlex
 import re
 import itertools
+import json
+from datetime import datetime
+from html import escape
 from pathlib import Path
 from typing import Optional, List, Dict, Set, Tuple, Sequence, Iterable, Callable
 
 from PySide6 import QtGui
-from PySide6.QtGui import QAction, QKeySequence, QShortcut, QIcon
+from PySide6.QtGui import QAction, QKeySequence, QShortcut, QIcon, QFontDatabase
 from PySide6.QtCore import Qt, QTimer, QThread, Signal, Slot
 from PySide6.QtNetwork import QAbstractSocket, QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
@@ -17,7 +20,8 @@ from PySide6.QtWidgets import (
     QPushButton, QLineEdit, QTableView, QMenu,
     QMessageBox, QDialog, QTableWidget, QTableWidgetItem, QHeaderView,
     QLabel, QListWidget, QListWidgetItem, QSplitter, QStyle, QCheckBox, QProgressBar,
-    QDialogButtonBox, QSystemTrayIcon, QPlainTextEdit
+    QDialogButtonBox, QSystemTrayIcon, QPlainTextEdit, QTabWidget, QTextBrowser,
+    QFileDialog, QCompleter
 )
 
 from models import PackageModel, PackageItem
@@ -28,6 +32,7 @@ from settings_dialog import SettingsDialog
 from cleanup_dialog import CleanupDialog
 from i18n import tr
 import update_service
+from search_history import SearchHistory
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -200,6 +205,10 @@ class MainWindow(QMainWindow):
         self._is_loading: bool = False
         self._update_indicator_state: Optional[Tuple[bool, str]] = None
         self._single_instance_server: Optional[QLocalServer] = None
+        self._notification_tray: Optional[QSystemTrayIcon] = None
+        self._explicit_packages: Optional[Set[str]] = None
+        self._dependency_packages: Optional[Set[str]] = None
+        self._orphan_packages: Optional[Set[str]] = None
 
         self.model = PackageModel()
         self.table_installed = QTableView()
@@ -246,6 +255,11 @@ class MainWindow(QMainWindow):
 
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText(tr("search_placeholder"))
+        self.search_history = SearchHistory()
+        self.search_completer = QCompleter(self.search_history.get_all())
+        self.search_completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.search_completer.setFilterMode(Qt.MatchContains)
+        self.search_edit.setCompleter(self.search_completer)
         self.btn_search = QPushButton(tr("btn_search"))
         self.btn_search.clicked.connect(self._on_search_clicked)
         self.search_info = QLabel(tr("search_info_select_source"))
@@ -279,7 +293,9 @@ class MainWindow(QMainWindow):
         queue_widget.setMinimumWidth(360)
 
         self.console = ManagedTerminalWidget(self)
+        self.console.contextMenuEvent = self._console_context_menu  # type: ignore[attr-defined]
         self.runner = self.console
+        self._default_terminal_font_size = int(settings.DEFAULTS.get("terminal_font_size", 10))
         font_size = settings.get("terminal_font_size", 10)
         font = self.console.font
         font.setPointSize(font_size)
@@ -314,6 +330,23 @@ class MainWindow(QMainWindow):
         installed_search_row = QHBoxLayout()
         installed_search_row.addWidget(self.installed_search_edit)
         installed_layout.addLayout(installed_search_row)
+
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel(tr("filters") + ":"))
+
+        self.filter_explicit = QCheckBox(tr("filter_explicit_only"))
+        self.filter_deps = QCheckBox(tr("filter_show_deps"))
+        self.filter_orphans = QCheckBox(tr("filter_orphans_only"))
+
+        filter_row.addWidget(self.filter_explicit)
+        filter_row.addWidget(self.filter_deps)
+        filter_row.addWidget(self.filter_orphans)
+        filter_row.addStretch()
+
+        installed_layout.addLayout(filter_row)
+        self.filter_explicit.toggled.connect(self._apply_advanced_filters)
+        self.filter_deps.toggled.connect(self._apply_advanced_filters)
+        self.filter_orphans.toggled.connect(self._apply_advanced_filters)
         installed_layout.addWidget(self.table_installed)
 
         mid_split = QSplitter()
@@ -346,6 +379,10 @@ class MainWindow(QMainWindow):
         root_v.addWidget(bottom_split, 2)
         self.setCentralWidget(root)
 
+        self.statusbar = self.statusBar()
+        self.status_label = QLabel()
+        self.statusbar.addPermanentWidget(self.status_label)
+
         self._build_menu()
         self._apply_settings()
         self.refresh()
@@ -362,11 +399,40 @@ class MainWindow(QMainWindow):
         sc_clear = QShortcut(QKeySequence("Ctrl+K"), self.console)
         sc_clear.activated.connect(self.console.reset_terminal)
 
+        shortcuts = [
+            ("Ctrl+F", lambda: self.search_edit.setFocus()),
+            ("Ctrl+U", self._system_update_dialog),
+            ("Ctrl+R", self.refresh),
+            ("F5", self.refresh),
+            ("Escape", lambda: self.search_edit.clear() if self.search_edit.hasFocus() else None),
+        ]
+
+        for key, handler in shortcuts:
+            QShortcut(QKeySequence(key), self).activated.connect(handler)
+
+        font_shortcuts = [
+            ("Ctrl++", lambda: self._adjust_terminal_font(1)),
+            ("Ctrl+=", lambda: self._adjust_terminal_font(1)),
+            ("Ctrl+-", lambda: self._adjust_terminal_font(-1)),
+            ("Ctrl+0", self._reset_terminal_font),
+        ]
+
+        for key, handler in font_shortcuts:
+            QShortcut(QKeySequence(key), self.console).activated.connect(handler)
+
     def _build_menu(self):
         m = self.menuBar().addMenu(tr("menu_actions"))
         act_refresh = QAction(tr("action_refresh"), self)
         act_refresh.triggered.connect(self.refresh)
         m.addAction(act_refresh)
+
+        m_backup = self.menuBar().addMenu(tr("menu_backup"))
+        act_export = QAction(tr("export_packages"), self)
+        act_export.triggered.connect(self._export_package_list)
+        m_backup.addAction(act_export)
+        act_import = QAction(tr("import_packages"), self)
+        act_import.triggered.connect(self._import_package_list)
+        m_backup.addAction(act_import)
 
         m_settings = self.menuBar().addMenu(tr("menu_settings"))
         act_settings = QAction(tr("action_settings"), self)
@@ -381,9 +447,45 @@ class MainWindow(QMainWindow):
         ))
         m_h.addAction(h1)
 
+        act_stats = QAction(tr("menu_statistics"), self)
+        act_stats.triggered.connect(self._show_statistics)
+        m_h.addAction(act_stats)
+
+        act_shortcuts = QAction(tr("menu_shortcuts"), self)
+        act_shortcuts.triggered.connect(self._show_shortcuts_help)
+        m_h.addAction(act_shortcuts)
+
     def setup_single_instance_server(self, server: QLocalServer) -> None:
         self._single_instance_server = server
         server.newConnection.connect(self._on_single_instance_connection)
+
+    def _show_shortcuts_help(self) -> None:
+        rows = [
+            ("Ctrl+F", tr("shortcut_focus_search")),
+            ("Ctrl+U", tr("shortcut_open_update")),
+            ("Ctrl+R", tr("shortcut_refresh")),
+            ("F5", tr("shortcut_refresh")),
+            ("Escape", tr("shortcut_clear_search")),
+            ("Ctrl+K", tr("shortcut_reset_terminal")),
+            ("Ctrl+,", tr("shortcut_open_settings")),
+        ]
+
+        table_rows = [
+            "<table style='width:100%; border-collapse:collapse;'>",
+            f"<tr><th align='left'>{tr('shortcut_column_key')}</th><th align='left'>{tr('shortcut_column_action')}</th></tr>",
+        ]
+        for key, description in rows:
+            table_rows.append(
+                f"<tr><td style='padding:4px 8px;'><b>{key}</b></td><td style='padding:4px 8px;'>{description}</td></tr>"
+            )
+        table_rows.append("</table>")
+
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("menu_shortcuts"))
+        box.setIcon(QMessageBox.Information)
+        box.setTextFormat(Qt.RichText)
+        box.setText("".join(table_rows))
+        box.exec()
 
     @Slot()
     def _on_single_instance_connection(self):
@@ -446,6 +548,8 @@ class MainWindow(QMainWindow):
             self.hide()
             # Keep the application running quietly in tray mode.
         else:
+            if self._notification_tray:
+                self._notification_tray.hide()
             event.accept()
             super().closeEvent(event)
 
@@ -470,6 +574,7 @@ class MainWindow(QMainWindow):
         self.loading_indicator.setFormat(tr("status_loading_packages"))
         self._update_reflector_button_state()
         self.installed_search_edit.setPlaceholderText(tr("installed_filter_placeholder"))
+        self._update_status_info()
 
     def _system_update_dialog(self):
         if self.runner.is_running():
@@ -503,6 +608,15 @@ class MainWindow(QMainWindow):
         self._restore_update_indicator()
         self._report_provider_errors()
         self._show_update_dialog_counts(pac, aur, flp)
+        total = pac + aur + flp
+        if total > 0 and settings.get("notify_updates_available", True):
+            summary = tr("update_service_tray_message", total)
+            details = tr("update_service_tray_details", pac, aur, flp)
+            self._show_notification(
+                tr("update_service_tray_title"),
+                f"{summary}\n{details}",
+                QSystemTrayIcon.Information,
+            )
 
     @Slot()
     def _on_update_thread_finished(self):
@@ -829,6 +943,20 @@ class MainWindow(QMainWindow):
                     on_done(success)
                 except Exception:
                     pass
+            if success and settings.get("notify_install_complete", True):
+                self._show_notification(
+                    tr("notification_install_complete_title"),
+                    tr("notification_install_complete_body"),
+                    QSystemTrayIcon.Information,
+                )
+            elif not success and settings.get("notify_errors", True):
+                code = completed_codes[-1] if completed_codes else -1
+                body = f"{tr('notification_error_title')} (code {code})"
+                self._show_notification(
+                    tr("notification_error_title"),
+                    body,
+                    QSystemTrayIcon.Critical,
+                )
             if schedule_refresh:
                 self._schedule_refresh()
             _restore_default_handler()
@@ -937,9 +1065,11 @@ class MainWindow(QMainWindow):
             b.setChecked(name == src)
         self.model.set_source_filter(src)
         self._update_search_placeholder()
+        self._apply_advanced_filters()
 
     def _on_installed_filter_changed(self, text: str):
         self.model.set_text_filter(text.strip())
+        self._apply_advanced_filters()
 
     def refresh(self):
         if self._is_loading:
@@ -962,6 +1092,11 @@ class MainWindow(QMainWindow):
         self.model.set_items(pkgs)
         self.console.feed_text(tr("msg_package_list_loading") + "\n")
         self.console.feed_text(tr("msg_loaded", len(pkgs)) + "\n")
+        self._explicit_packages = None
+        self._dependency_packages = None
+        self._orphan_packages = None
+        self._update_status_info()
+        self._apply_advanced_filters()
 
     @Slot()
     def _on_refresh_thread_end(self):
@@ -1003,6 +1138,16 @@ class MainWindow(QMainWindow):
                 self.console.feed_text(details + "\n")
 
         self.console.feed_text("\n")
+        if settings.get("notify_errors", True) and errors:
+            first = errors[0]
+            body = f"{first.get('command', '')}: {first.get('message', '')}".strip()
+            if not body:
+                body = tr("notification_error_title")
+            self._show_notification(
+                tr("notification_error_title"),
+                body,
+                QSystemTrayIcon.Critical,
+            )
 
     def _update_search_placeholder(self):
         if self.current_source == "Repo":
@@ -1022,6 +1167,207 @@ class MainWindow(QMainWindow):
         else:
             self.search_edit.setPlaceholderText(tr("search_placeholder"))
             self.search_info.setText(tr("search_info_all"))
+
+    def _update_status_info(self):
+        if not hasattr(self, "status_label"):
+            return
+
+        total = self.model.total_count()
+        filtered = self.model.filtered_count()
+        if hasattr(self, "table_installed"):
+            visible = 0
+            for row in range(self.model.rowCount()):
+                if not self.table_installed.isRowHidden(row):
+                    visible += 1
+            filtered = visible
+        helper = settings.get_aur_helper() or "-"
+        root_cmd = settings.get_root_command()
+        if root_cmd:
+            root_display = " ".join(root_cmd)
+        else:
+            configured = settings.get("root_method", "")
+            root_display = configured if configured else "-"
+
+        status_text = (
+            f"{total} {tr('packages')} ({filtered} {tr('filtered')}) "
+            f"| AUR: {helper} | Root: {root_display}"
+        )
+        self.status_label.setText(status_text)
+
+    def _apply_advanced_filters(self):
+        if not hasattr(self, "table_installed"):
+            return
+
+        active_filters = [
+            self.filter_explicit.isChecked(),
+            self.filter_deps.isChecked(),
+            self.filter_orphans.isChecked(),
+        ]
+
+        if not any(active_filters):
+            for row in range(self.model.rowCount()):
+                self.table_installed.setRowHidden(row, False)
+            self._update_status_info()
+            return
+
+        if self.filter_explicit.isChecked() and self._explicit_packages is None:
+            self._explicit_packages = providers.get_explicit_packages()
+        if self.filter_deps.isChecked() and self._dependency_packages is None:
+            self._dependency_packages = providers.get_dependency_packages()
+        if self.filter_orphans.isChecked() and self._orphan_packages is None:
+            self._orphan_packages = providers.get_orphaned_packages()
+
+        explicit = self._explicit_packages or set()
+        deps = self._dependency_packages or set()
+        orphans = self._orphan_packages or set()
+
+        for row in range(self.model.rowCount()):
+            item = self.model.item_at(row)
+            show = True
+            if self.filter_explicit.isChecked():
+                show = item.pid in explicit
+            if show and self.filter_deps.isChecked():
+                show = item.pid in deps
+            if show and self.filter_orphans.isChecked():
+                show = item.pid in orphans
+            self.table_installed.setRowHidden(row, not show)
+
+        self._update_status_info()
+
+    def _calculate_statistics(self) -> Dict[str, object]:
+        items = self.model.all_items()
+        repo = sum(1 for it in items if it.source == "Repo")
+        aur = sum(1 for it in items if it.source == "AUR")
+        flatpak = sum(1 for it in items if it.source == "Flatpak")
+        size_bytes = sum(
+            PackageModel._size_to_bytes(it.size)
+            for it in items
+            if it.size and it.size != "?"
+        )
+        size_str = self._format_human_size(size_bytes) if size_bytes > 0 else "N/A"
+        return {
+            "total": len(items),
+            "repo": repo,
+            "aur": aur,
+            "flatpak": flatpak,
+            "size": size_str,
+        }
+
+    @staticmethod
+    def _format_human_size(num: float) -> str:
+        units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
+        value = num
+        for unit in units:
+            if value < 1024 or unit == units[-1]:
+                return f"{value:.1f} {unit}"
+            value /= 1024
+        return f"{num:.1f} B"
+
+    def _show_statistics(self) -> None:
+        stats = self._calculate_statistics()
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("package_statistics"))
+        dlg.resize(420, 320)
+
+        layout = QVBoxLayout(dlg)
+        browser = QTextBrowser()
+        rows = [
+            (tr("total_packages"), stats["total"]),
+            (tr("from_repos"), stats["repo"]),
+            (tr("from_aur"), stats["aur"]),
+            (tr("from_flatpak"), stats["flatpak"]),
+            (tr("total_size"), stats["size"]),
+        ]
+        html = [f"<h2>{tr('package_statistics')}</h2>", "<table style='width:100%; border-collapse:collapse;'>"]
+        for label, value in rows:
+            html.append(
+                f"<tr><td style='padding:4px 8px;'><b>{label}</b></td><td style='padding:4px 8px;'>{value}</td></tr>"
+            )
+        html.append("</table>")
+        browser.setHtml("".join(html))
+        layout.addWidget(browser)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dlg.reject)
+        buttons.accepted.connect(dlg.accept)
+        layout.addWidget(buttons)
+
+        dlg.exec()
+
+    def _reset_terminal_font(self) -> None:
+        current = self.console.font.pointSize()
+        delta = self._default_terminal_font_size - current
+        if delta:
+            self._adjust_terminal_font(delta)
+
+    def _adjust_terminal_font(self, delta: int):
+        """Adjust the terminal font size by delta and persist the change."""
+
+        current = self.console.font.pointSize()
+        new_size = max(6, min(24, current + delta))
+        if new_size == current:
+            return
+
+        font = self.console.font
+        font.setPointSize(new_size)
+        self.console.font = font
+        self.console.fm = QtGui.QFontMetrics(font)
+        self.console.char_w = self.console.fm.horizontalAdvance("M")
+        self.console.char_h = self.console.fm.height()
+        self.console.viewport().update()
+        settings.set("terminal_font_size", new_size)
+        settings.save()
+
+    def _console_context_menu(self, event):
+        menu = QMenu(self.console)
+        act_copy = menu.addAction(tr("terminal_copy"))
+        act_paste = menu.addAction(tr("terminal_paste"))
+        act_reset = menu.addAction(tr("terminal_reset"))
+        menu.addSeparator()
+        act_inc = menu.addAction(tr("increase_font"))
+        act_dec = menu.addAction(tr("decrease_font"))
+        act_reset_font = menu.addAction(tr("reset_font"))
+
+        chosen = menu.exec(event.globalPos()) if event else None
+
+        if chosen == act_copy:
+            self.console.copy_selection()
+        elif chosen == act_paste:
+            self.console.paste_from_clipboard()
+        elif chosen == act_reset:
+            self.console.reset_terminal()
+        elif chosen == act_inc:
+            self._adjust_terminal_font(1)
+        elif chosen == act_dec:
+            self._adjust_terminal_font(-1)
+        elif chosen == act_reset_font:
+            self._reset_terminal_font()
+
+    def _ensure_notification_tray(self) -> Optional[QSystemTrayIcon]:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return None
+        if self._notification_tray is None:
+            icon = self.windowIcon()
+            if icon.isNull():
+                icon = self.style().standardIcon(QStyle.SP_MessageBoxInformation)
+            tray = QSystemTrayIcon(icon, self)
+            tray.setVisible(True)
+            self._notification_tray = tray
+        return self._notification_tray
+
+    def _show_notification(
+        self,
+        title: str,
+        message: str,
+        icon: QSystemTrayIcon.MessageIcon = QSystemTrayIcon.Information,
+        timeout_ms: int = 8000,
+    ) -> None:
+        tray = self._ensure_notification_tray()
+        if not tray:
+            return
+        tray.show()
+        tray.showMessage(title, message, icon, timeout_ms)
+        QTimer.singleShot(timeout_ms + 500, tray.hide)
 
     def _ctx_menu_installed(self, pos):
         idx = self.table_installed.indexAt(pos)
@@ -1130,6 +1476,10 @@ class MainWindow(QMainWindow):
             return
 
         self.console.feed_text(tr("msg_searching", self.current_source, term) + "\n")
+        self.search_history.add(term)
+        model = self.search_completer.model()
+        if hasattr(model, "setStringList"):
+            model.setStringList(self.search_history.get_all())
         self.results.setRowCount(0)
 
         if self.current_source == "Repo":
@@ -1399,15 +1749,348 @@ class MainWindow(QMainWindow):
             info = tr("msg_no_details_available")
         self._show_text_dialog(title, info)
 
+    def _format_package_info(self, text: str) -> str:
+        """Convert plain package information text into styled HTML."""
+
+        url_pattern = re.compile(r'(https?://[^\s<>"]+)')
+
+        def linkify(segment: str) -> str:
+            result: List[str] = []
+            last = 0
+            for match in url_pattern.finditer(segment):
+                result.append(escape(segment[last:match.start()]))
+                url = match.group(0)
+                safe_url = escape(url)
+                result.append(f'<a href="{safe_url}">{safe_url}</a>')
+                last = match.end()
+            result.append(escape(segment[last:]))
+            return "".join(result)
+
+        tokens: List[Tuple[str, Optional[Tuple[str, str]]]] = []
+        for raw in text.splitlines():
+            if not raw.strip():
+                tokens.append(("break", None))
+                continue
+
+            if ":" in raw:
+                key, value = raw.split(":", 1)
+                key = key.strip()
+                value = value.strip()
+                if key:
+                    tokens.append(("kv", (key, value)))
+                    continue
+
+            tokens.append(("text", (raw.strip(), "")))
+
+        style = (
+            "<style>"
+            "body{font-family:'Noto Sans',sans-serif;font-size:13px;color:#222;}"
+            "dl{margin:0;}"
+            "dt{color:#1793D1;font-weight:bold;margin-top:6px;}"
+            "dd{margin:0 0 6px 14px;}"
+            "p{margin:6px 0;}"
+            "</style>"
+        )
+
+        html_parts: List[str] = ["<html><head>", style, "</head><body>"]
+        in_dl = False
+
+        for kind, payload in tokens:
+            if kind == "kv" and payload:
+                if not in_dl:
+                    html_parts.append("<dl>")
+                    in_dl = True
+                key, value = payload
+                key_html = escape(key)
+                value_html = linkify(value)
+                if not value_html:
+                    value_html = "&nbsp;"
+                html_parts.append(f"<dt>{key_html}</dt><dd>{value_html}</dd>")
+            elif kind == "break":
+                if in_dl:
+                    html_parts.append("</dl>")
+                    in_dl = False
+                html_parts.append("<p>&nbsp;</p>")
+            else:
+                if in_dl:
+                    html_parts.append("</dl>")
+                    in_dl = False
+                if payload:
+                    text_segment = payload[0]
+                else:
+                    text_segment = ""
+                html_parts.append(f"<p>{linkify(text_segment)}</p>")
+
+        if in_dl:
+            html_parts.append("</dl>")
+
+        html_parts.append("</body></html>")
+        return "".join(html_parts)
+
     def _show_text_dialog(self, title: str, text: str):
         dlg = QDialog(self)
         dlg.setWindowTitle(title)
-        dlg.resize(800, 600)
-        view = QPlainTextEdit()
-        view.setReadOnly(True)
-        view.setPlainText(text)
-        lay = QVBoxLayout(dlg)
-        lay.addWidget(view)
+        dlg.resize(900, 620)
+
+        tabs = QTabWidget(dlg)
+
+        formatted = QTextBrowser()
+        formatted.setOpenExternalLinks(True)
+        formatted.setHtml(self._format_package_info(text))
+        tabs.addTab(formatted, tr("tab_formatted"))
+
+        raw_view = QPlainTextEdit()
+        raw_view.setReadOnly(True)
+        raw_view.setPlainText(text)
+        mono_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        raw_view.setFont(mono_font)
+        tabs.addTab(raw_view, tr("tab_raw"))
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dlg.reject)
+        copy_btn = buttons.addButton(tr("btn_copy_all"), QDialogButtonBox.ActionRole)
+        copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(text))
+
+        layout = QVBoxLayout(dlg)
+        layout.addWidget(tabs)
+        layout.addWidget(buttons)
+
+        dlg.exec()
+
+    def _export_package_list(self):
+        """Export the installed packages into a JSON snapshot."""
+
+        default_name = f"wrappac_backup_{datetime.now():%Y%m%d}.json"
+        default_path = str(Path.home() / default_name)
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            tr("export_packages"),
+            default_path,
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not filename:
+            return
+
+        items = self.model.all_items()
+        pacman_pkgs = sorted({it.pid for it in items if it.source == "Repo"})
+        aur_pkgs = sorted({it.pid for it in items if it.source == "AUR"})
+        flatpak_entries = [
+            {
+                "id": it.pid,
+                "remote": getattr(it, "origin", ""),
+            }
+            for it in items
+            if it.source == "Flatpak"
+        ]
+
+        payload = {
+            "export_date": datetime.now().isoformat(timespec="seconds"),
+            "pacman": pacman_pkgs,
+            "aur": aur_pkgs,
+            "flatpak": flatpak_entries,
+        }
+
+        try:
+            with open(filename, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, ensure_ascii=False)
+        except Exception as exc:
+            QMessageBox.warning(self, tr("dialog_hint"), str(exc))
+            return
+
+        self.console.feed_text(tr("export_packages") + f": {filename}\n")
+
+    def _import_package_list(self):
+        """Load a previously exported package list and offer installations."""
+
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("import_packages"),
+            str(Path.home()),
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not filename:
+            return
+
+        try:
+            with open(filename, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception as exc:
+            QMessageBox.warning(self, tr("dialog_hint"), str(exc))
+            return
+
+        pacman_list = [
+            str(entry).strip()
+            for entry in data.get("pacman", [])
+            if isinstance(entry, str) and str(entry).strip()
+        ]
+        aur_list = [
+            str(entry).strip()
+            for entry in data.get("aur", [])
+            if isinstance(entry, str) and str(entry).strip()
+        ]
+        flatpak_list: List[Tuple[str, str]] = []
+        for entry in data.get("flatpak", []):
+            if isinstance(entry, str):
+                ident = entry.strip()
+                if ident:
+                    flatpak_list.append((ident, ""))
+            elif isinstance(entry, dict):
+                ident = str(entry.get("id") or entry.get("application") or entry.get("name") or "").strip()
+                remote = str(entry.get("remote") or entry.get("origin") or "").strip()
+                if ident:
+                    flatpak_list.append((ident, remote))
+
+        items = self.model.all_items()
+        installed_pacman = {it.pid for it in items if it.source == "Repo"}
+        installed_aur = {it.pid for it in items if it.source == "AUR"}
+        installed_flatpak = {it.pid for it in items if it.source == "Flatpak"}
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("import_packages"))
+        dlg.resize(540, 420)
+
+        layout = QVBoxLayout(dlg)
+        export_date = data.get("export_date", "")
+        label_text = tr("will_be_installed")
+        if export_date:
+            label_text = f"{label_text} – {export_date}"
+        info = QLabel(label_text)
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        tabs = QTabWidget(dlg)
+        layout.addWidget(tabs, 1)
+
+        installed_brush = QtGui.QBrush(QtGui.QColor("#C8E6C9"))
+        lists: Dict[str, QListWidget] = {}
+
+        def _create_list(entries: List, installed_set: Set[str], formatter) -> QListWidget:
+            widget = QListWidget()
+            widget.setSelectionMode(QListWidget.ExtendedSelection)
+            for entry in entries:
+                display_text, value = formatter(entry)
+                if not value:
+                    continue
+                item = QListWidgetItem(display_text)
+                item.setData(Qt.UserRole, value)
+                is_installed = value in installed_set if isinstance(value, str) else value[0] in installed_set
+                item.setData(Qt.UserRole + 1, is_installed)
+                if is_installed:
+                    item.setBackground(installed_brush)
+                    item.setToolTip(tr("already_installed"))
+                else:
+                    item.setToolTip(tr("will_be_installed"))
+                widget.addItem(item)
+            return widget
+
+        lists["pacman"] = _create_list(
+            pacman_list,
+            installed_pacman,
+            lambda name: (name, name),
+        )
+        tabs.addTab(lists["pacman"], tr("btn_official"))
+
+        lists["aur"] = _create_list(
+            aur_list,
+            installed_aur,
+            lambda name: (name, name),
+        )
+        tabs.addTab(lists["aur"], tr("btn_aur"))
+
+        def _format_flatpak(entry: Tuple[str, str]) -> Tuple[str, Tuple[str, str]]:
+            ident, remote = entry
+            label = ident if not remote else f"{ident} ({remote})"
+            return label, (ident, remote)
+
+        lists["flatpak"] = _create_list(
+            flatpak_list,
+            installed_flatpak,
+            _format_flatpak,
+        )
+        tabs.addTab(lists["flatpak"], tr("btn_flatpak"))
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
+        btn_install_all = buttons.addButton(tr("install_all"), QDialogButtonBox.ActionRole)
+        btn_install_sel = buttons.addButton(tr("install_selected"), QDialogButtonBox.ActionRole)
+        layout.addWidget(buttons)
+
+        buttons.rejected.connect(dlg.reject)
+
+        def _collect_selection(all_items: bool) -> Dict[str, List]:
+            collected = {"pacman": [], "aur": [], "flatpak": []}
+            for key, widget in lists.items():
+                if all_items:
+                    items_iter = [widget.item(i) for i in range(widget.count())]
+                else:
+                    items_iter = widget.selectedItems()
+                for list_item in items_iter:
+                    if not list_item:
+                        continue
+                    if list_item.data(Qt.UserRole + 1):
+                        continue
+                    value = list_item.data(Qt.UserRole)
+                    if not value:
+                        continue
+                    collected[key].append(value)
+            return collected
+
+        def _perform_install(all_items: bool):
+            selection = _collect_selection(all_items)
+            if not any(selection.values()):
+                QMessageBox.information(self, tr("dialog_hint"), tr("already_installed"))
+                return
+
+            summary_lines = []
+            if selection["pacman"]:
+                summary_lines.append("pacman: " + ", ".join(selection["pacman"]))
+            if selection["aur"]:
+                summary_lines.append("AUR: " + ", ".join(selection["aur"]))
+            if selection["flatpak"]:
+                ids = [pkg if isinstance(pkg, str) else pkg[0] for pkg in selection["flatpak"]]
+                summary_lines.append("Flatpak: " + ", ".join(ids))
+
+            confirm_text = tr("will_be_installed") + ":\n" + "\n".join(summary_lines)
+            if QMessageBox.question(self, tr("dialog_confirm"), confirm_text) != QMessageBox.Yes:
+                return
+
+            cmds: List[Sequence[str] | Dict[str, object]] = []
+
+            if selection["pacman"]:
+                cmds.append(["pacman", "-S", *selection["pacman"]])
+
+            if selection["aur"]:
+                tool = settings.get_aur_helper()
+                if not tool:
+                    QMessageBox.warning(self, tr("dialog_hint"), tr("msg_no_aur_helper_configured"))
+                else:
+                    cmds.append([tool, "-S", *selection["aur"]])
+
+            if selection["flatpak"]:
+                rows = []
+                for value in selection["flatpak"]:
+                    if isinstance(value, tuple):
+                        ident, remote = value
+                    else:
+                        ident, remote = value, ""
+                    rows.append({"application": ident, "remotes": remote, "source": "Flatpak"})
+                flatpak_cmds = self._prepare_flatpak_install_commands(rows)
+                if flatpak_cmds is None:
+                    return
+                for message, argv, needs_root in flatpak_cmds:
+                    if message:
+                        self.console.feed_text(message + "\n")
+                    cmds.append({"argv": argv, "needs_root": needs_root})
+
+            if not cmds:
+                QMessageBox.information(self, tr("dialog_hint"), tr("already_installed"))
+                return
+
+            dlg.accept()
+            self._run_cmds_sequential(cmds)
+
+        btn_install_all.clicked.connect(lambda: _perform_install(True))
+        btn_install_sel.clicked.connect(lambda: _perform_install(False))
+
         dlg.exec()
 
     def _results_install_now(self):

@@ -3,7 +3,7 @@ import re
 import shutil
 import subprocess
 import shlex
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Set
 
 from models import PackageItem
 from settings import settings
@@ -16,6 +16,47 @@ def _format_cmd(cmd: list[str]) -> str:
         return shlex.join(cmd)
     except AttributeError:
         return " ".join(cmd)
+
+_pacman_size_cache: Optional[Dict[str, str]] = None
+
+
+def get_all_package_sizes(force_refresh: bool = False) -> Dict[str, str]:
+    """Retrieve installed sizes for all packages using a single pacman call."""
+
+    global _pacman_size_cache
+    if not force_refresh and _pacman_size_cache is not None:
+        return _pacman_size_cache
+
+    sizes: Dict[str, str] = {}
+
+    if not _which_or_hint("pacman"):
+        _pacman_size_cache = sizes
+        return sizes
+
+    try:
+        env = os.environ.copy()
+        env["LC_ALL"] = "C"
+        out = subprocess.check_output(
+            ["pacman", "-Qi"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            env=env,
+        )
+    except Exception:
+        _pacman_size_cache = sizes
+        return sizes
+
+    current_pkg: Optional[str] = None
+    for raw in out.splitlines():
+        line = raw.strip()
+        if line.startswith("Name"):
+            current_pkg = line.split(":", 1)[1].strip()
+        elif line.startswith("Installed Size") and current_pkg:
+            sizes[current_pkg] = line.split(":", 1)[1].strip()
+            current_pkg = None
+
+    _pacman_size_cache = sizes
+    return sizes
 
 
 def _record_error(cmd: list[str], message: str, stderr: str = "") -> None:
@@ -109,12 +150,15 @@ def list_pacman_native() -> List[PackageItem]:
     """Packages from the official repositories via pacman -Qn --format."""
 
     items: List[PackageItem] = []
+    sizes = get_all_package_sizes(force_refresh=True)
     for name, version, repo in _pacman_query(["-Qn"], include_repo=True):
+        size = sizes.get(name, "")
         items.append(
             PackageItem(
                 pid=name,
                 name=name,
                 version=version,
+                size=size,
                 source="Repo",
                 origin=(repo or "unknown"),
             )
@@ -126,13 +170,16 @@ def list_pacman_foreign() -> List[PackageItem]:
     """Foreign or AUR packages via pacman -Qm --format (removable with pacman -Rns)."""
 
     items: List[PackageItem] = []
+    sizes = get_all_package_sizes()
     for name, version, repo in _pacman_query(["-Qm"], include_repo=True):
         origin = repo or "local"
+        size = sizes.get(name, "")
         items.append(
             PackageItem(
                 pid=name,
                 name=name,
                 version=version,
+                size=size,
                 source="AUR",
                 origin=origin,
             )
@@ -152,13 +199,95 @@ def list_flatpak() -> List[PackageItem]:
             parts = line.split()  # Fallback if the tab separator is missing
         if len(parts) >= 4:
             appid, dispname, branch, origin = [p.strip() for p in parts[:4]]
-            items.append(PackageItem(pid=appid, name=dispname or appid, version=branch, source="Flatpak", origin=origin))
+            size = get_flatpak_size(appid)
+            items.append(
+                PackageItem(
+                    pid=appid,
+                    name=dispname or appid,
+                    version=branch,
+                    size=size,
+                    source="Flatpak",
+                    origin=origin,
+                )
+            )
     return items
+
+
+def get_flatpak_size(app_id: str) -> str:
+    """Extract the installed size for a Flatpak application."""
+
+    try:
+        env = os.environ.copy()
+        env["LC_ALL"] = "C"
+
+        scope: Optional[str] = None
+
+        user_cmd = ["flatpak", "list", "--user", "--app", "--columns=application"]
+        user_out = subprocess.check_output(
+            user_cmd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+            env=env,
+        )
+        if any(line.strip() == app_id for line in user_out.splitlines()):
+            scope = "--user"
+        else:
+            system_cmd = ["flatpak", "list", "--system", "--app", "--columns=application"]
+            system_out = subprocess.check_output(
+                system_cmd,
+                text=True,
+                stderr=subprocess.DEVNULL,
+                env=env,
+            )
+            if any(line.strip() == app_id for line in system_out.splitlines()):
+                scope = "--system"
+
+        info_cmd = ["flatpak", "info"]
+        if scope is not None:
+            info_cmd.append(scope)
+        info_cmd.append(app_id)
+
+        out = subprocess.check_output(
+            info_cmd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+            env=env,
+        )
+    except Exception:
+        return ""
+
+    for line in out.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Installed:"):
+            return stripped.split(":", 1)[1].strip()
+
+    return ""
 
 
 def list_all() -> List[PackageItem]:
     """Return the combined list of Repo, AUR, and Flatpak packages."""
     return list_pacman_native() + list_pacman_foreign() + list_flatpak()
+
+
+def get_explicit_packages() -> Set[str]:
+    """Return the set of explicitly installed packages (pacman -Qeq)."""
+
+    out = _run(["pacman", "-Qeq"])
+    return {line.strip() for line in out.splitlines() if line.strip()}
+
+
+def get_dependency_packages() -> Set[str]:
+    """Return the set of packages installed as dependencies (pacman -Qdq)."""
+
+    out = _run(["pacman", "-Qdq"])
+    return {line.strip() for line in out.splitlines() if line.strip()}
+
+
+def get_orphaned_packages() -> Set[str]:
+    """Return the set of orphaned packages (pacman -Qtdq)."""
+
+    out = _run(["pacman", "-Qtdq"])
+    return {line.strip() for line in out.splitlines() if line.strip()}
 
 
 def updates_pacman_count() -> int:

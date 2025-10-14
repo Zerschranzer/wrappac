@@ -94,6 +94,7 @@ class SettingsDialog(QDialog):
         tabs.addTab(self._build_flatpak_tab(), tr("settings_tab_flatpak"))
         tabs.addTab(self._build_cleanup_tab(), tr("settings_tab_cleanup"))
         tabs.addTab(self._build_update_service_tab(), tr("settings_tab_update_service"))
+        tabs.addTab(self._build_notifications_tab(), tr("settings_tab_notifications"))
         tabs.addTab(self._build_language_tab(), tr("settings_tab_language"))
 
         layout.addWidget(tabs)
@@ -475,6 +476,25 @@ class SettingsDialog(QDialog):
         layout.addStretch()
         return widget
 
+    def _build_notifications_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        info = QLabel(tr("settings_notifications_info"))
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        self.notify_updates_available = QCheckBox(tr("notify_updates_available"))
+        self.notify_install_complete = QCheckBox(tr("notify_install_complete"))
+        self.notify_errors = QCheckBox(tr("notify_errors"))
+
+        for cb in [self.notify_updates_available, self.notify_install_complete, self.notify_errors]:
+            cb.setChecked(True)
+            layout.addWidget(cb)
+
+        layout.addStretch()
+        return widget
+
     # ===== TAB 8: Update Service =====
     def _build_update_service_tab(self) -> QWidget:
         widget = QWidget()
@@ -712,6 +732,11 @@ class SettingsDialog(QDialog):
         # Cleanup
         self.cleanup_keep_versions.setValue(settings.get("cleanup_keep_pkg_versions", 2))
         self.cleanup_log_age.setValue(settings.get("cleanup_log_max_age_days", 14))
+
+        # Notifications
+        self.notify_updates_available.setChecked(settings.get("notify_updates_available", True))
+        self.notify_install_complete.setChecked(settings.get("notify_install_complete", True))
+        self.notify_errors.setChecked(settings.get("notify_errors", True))
 
         # Sprache
         lang = settings.get("language", "auto")
@@ -956,6 +981,11 @@ class SettingsDialog(QDialog):
         # Cleanup
         settings.set("cleanup_keep_pkg_versions", self.cleanup_keep_versions.value())
         settings.set("cleanup_log_max_age_days", self.cleanup_log_age.value())
+
+        # Notifications
+        settings.set("notify_updates_available", self.notify_updates_available.isChecked())
+        settings.set("notify_install_complete", self.notify_install_complete.isChecked())
+        settings.set("notify_errors", self.notify_errors.isChecked())
 
         # Sprache
         if self.lang_auto.isChecked():

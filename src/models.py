@@ -1,6 +1,9 @@
 from dataclasses import dataclass
+import re
 from typing import List
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
+
+from i18n import tr
 
 @dataclass
 class PackageItem:
@@ -9,9 +12,10 @@ class PackageItem:
     version: str
     source: str        # "Repo" | "AUR" | "Flatpak"
     origin: str        # Repository or remote (e.g. extra, community, local, flathub)
+    size: str = ""
 
 class PackageModel(QAbstractTableModel):
-    headers = ["Name", "Version", "Quelle", "Origin/Repo", "ID"]
+    headers = ["Name", "Version", "Size", "Quelle", "Origin/Repo", "ID"]
 
     def __init__(self, items: List[PackageItem] | None = None):
         super().__init__()
@@ -49,19 +53,24 @@ class PackageModel(QAbstractTableModel):
         attr_map = {
             0: 'name',      # Name
             1: 'version',   # Version
-            2: 'source',    # Source
-            3: 'origin',    # Origin/Repo
-            4: 'pid'        # ID
+            2: 'size',      # Size
+            3: 'source',    # Source
+            4: 'origin',    # Origin/Repo
+            5: 'pid'        # ID
         }
 
-        attr = attr_map.get(self._sort_column, 'name')
         reverse = (self._sort_order == Qt.DescendingOrder)
 
-        # Perform the sort; use case-insensitive comparisons for strings
-        self._filtered.sort(
-            key=lambda item: getattr(item, attr, '').lower() if isinstance(getattr(item, attr, ''), str) else getattr(item, attr, ''),
-            reverse=reverse
-        )
+        def _sort_key(item: PackageItem):
+            if self._sort_column == 2:
+                return self._size_to_bytes(item.size)
+            attr = attr_map.get(self._sort_column, 'name')
+            value = getattr(item, attr, '')
+            if isinstance(value, str):
+                return value.lower()
+            return value
+
+        self._filtered.sort(key=_sort_key, reverse=reverse)
 
     def set_text_filter(self, text: str):
         self._text_filter = text
@@ -88,6 +97,15 @@ class PackageModel(QAbstractTableModel):
         self._apply_sort()
         self.layoutChanged.emit()
 
+    def total_count(self) -> int:
+        return len(self._all)
+
+    def filtered_count(self) -> int:
+        return len(self._filtered)
+
+    def all_items(self) -> List[PackageItem]:
+        return list(self._all)
+
     # Qt model impl
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self._filtered)
@@ -100,12 +118,59 @@ class PackageModel(QAbstractTableModel):
             return None
         it = self._filtered[index.row()]
         col = index.column()
-        return [it.name, it.version, it.source, it.origin, it.pid][col]
+        values = [
+            it.name,
+            it.version,
+            it.size or "",
+            it.source,
+            it.origin,
+            it.pid,
+        ]
+        return values[col]
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            labels = [
+                tr("table_package"),
+                tr("table_version"),
+                tr("table_size"),
+                tr("table_source"),
+                tr("table_remote_source"),
+                "ID",
+            ]
+            if 0 <= section < len(labels):
+                return labels[section]
             return self.headers[section]
         return None
 
     def item_at(self, row: int) -> PackageItem:
         return self._filtered[row]
+
+    @staticmethod
+    def _size_to_bytes(size: str) -> float:
+        if not size:
+            return 0.0
+        match = re.match(r"([0-9.,]+)\s*([KMGTPE]?i?B)?", size.strip())
+        if not match:
+            return 0.0
+        number_part = match.group(1).replace(',', '.')
+        try:
+            value = float(number_part)
+        except ValueError:
+            return 0.0
+        unit = (match.group(2) or '').upper()
+        factors = {
+            'B': 1,
+            'KIB': 1024,
+            'MIB': 1024 ** 2,
+            'GIB': 1024 ** 3,
+            'TIB': 1024 ** 4,
+            'PIB': 1024 ** 5,
+            'KB': 1000,
+            'MB': 1000 ** 2,
+            'GB': 1000 ** 3,
+            'TB': 1000 ** 4,
+            'PB': 1000 ** 5,
+        }
+        multiplier = factors.get(unit, 1)
+        return value * multiplier

@@ -89,6 +89,10 @@ It's for users who value Arch's simplicity and control, but still want a clear o
   - Pacman flags for removal (`-Rns`, `-Rn`, `-Rs`, `-R`)
   - Terminal appearance (font, theme)
   - Auto-refresh after operations
+* **Rich package insights** — dual-tab details dialog with formatted metadata and raw command output
+* **Persistent search history** — autocomplete remembers recent queries for faster lookups
+* **Backup tools** — export installed packages to JSON snapshots and re-import with per-source previews
+* **Status-aware overview** — live package counters, size column, and advanced filters for explicit, dependency, or orphaned installs
 * **Install queue** — batch multiple package installations
 * **Comprehensive error reporting** — shows failed commands with exit codes and stderr
 
