@@ -718,13 +718,14 @@ class MainWindow(QMainWindow):
 
         if do_flp and shutil.which("flatpak"):
             if preview:
-                cmds.append(["flatpak", "remote-ls", "--updates"])
+                cmds.append(["flatpak", "remote-ls", "--updates", "--user"])
+                cmds.append(["flatpak", "remote-ls", "--updates", "--system"])
             else:
-                scope = settings.get("flatpak_default_scope", "user")
-                if scope == "user":
-                    cmds.append(["flatpak", "update", "--user", "-y"])
-                else:
-                    cmds.append(["flatpak", "update", "-y"])
+                cmds.append(["flatpak", "update", "--user", "-y"])
+                cmds.append({
+                    "argv": ["flatpak", "update", "--system", "-y"],
+                    "needs_root": True,
+                })
 
         if not cmds:
             QMessageBox.information(
