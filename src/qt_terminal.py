@@ -174,7 +174,8 @@ class ScreenBuffer:
 class AnsiParser:
     """Simple ANSI/VT100 parser."""
     CSI_RE = re.compile(r"\x1b\[([?]?[0-9;]*)([A-Za-z])")
-    OSC_TITLE_RE = re.compile(r"\x1b\]0;.*?\x07")
+    # Filter all OSC sequences (title, systemd session logging, etc.)
+    OSC_RE = re.compile(r"\x1b\][0-9]+;.*?(?:\x07|\x1b\\)")
 
     def __init__(self, screen: ScreenBuffer):
         self.screen = screen
@@ -273,7 +274,7 @@ class AnsiParser:
         txt = data.decode('utf-8', errors='replace')
 
         # Remove OSC (Operating System Command) sequences
-        txt = self.OSC_TITLE_RE.sub('', txt)
+        txt = self.OSC_RE.sub('', txt)
 
         # Remove other problematic sequences:
         # - G0/G1 character set designation: ESC ( B, ESC ) 0, etc.
