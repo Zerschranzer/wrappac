@@ -632,8 +632,10 @@ class TerminalWidget(QtWidgets.QAbstractScrollArea):
             painter.fillRect(QtCore.QRect(x, y, max(2, self.char_w // 8), self.char_h),
                              QtGui.QColor(220, 220, 220, 180))
 
-        # Selection
-        if self.selection_active and self.sel_start and self.sel_end:
+        # Selection: draw it whenever a real range exists (sel_start/sel_end
+        # persist after the mouse is released); selection_active only tracks
+        # the drag in progress, so it must not gate the rendering here.
+        if self.sel_start is not None and self.sel_end is not None and self.sel_start != self.sel_end:
             a = self._norm_sel(self.sel_start, self.sel_end)
             if a:
                 (r0, c0), (r1, c1) = a
