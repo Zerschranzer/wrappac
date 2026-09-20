@@ -409,9 +409,11 @@ class TerminalWidget(QtWidgets.QAbstractScrollArea):
         self.cursor_blink.timeout.connect(self._toggle_cursor)
         self.cursor_blink.start(CURSOR_BLINK_MS)
 
-        self.selection_active = False
-        self.sel_start: Optional[Tuple[int, int]] = None
-        self.sel_end: Optional[Tuple[int, int]] = None
+        self.selecting = False
+        self._dragged = False
+        self.sel_anchor: Optional[Tuple[int, int]] = None  # absolute (row, col)
+        self.sel_cursor: Optional[Tuple[int, int]] = None  # absolute (row, col)
+        self._last_mouse_pos: Optional[QtCore.QPoint] = None
 
         self.master_fd: Optional[int] = None
         self.child_pid: Optional[int] = None
@@ -632,16 +634,23 @@ class TerminalWidget(QtWidgets.QAbstractScrollArea):
             painter.fillRect(QtCore.QRect(x, y, max(2, self.char_w // 8), self.char_h),
                              QtGui.QColor(220, 220, 220, 180))
 
-        # Selection
-        if self.selection_active and self.sel_start and self.sel_end:
-            a = self._norm_sel(self.sel_start, self.sel_end)
-            if a:
-                (r0, c0), (r1, c1) = a
+        # Selection: stored in absolute buffer coordinates, so translate to
+        # viewport rows for drawing. This keeps the highlight anchored to the
+        # text (even while the buffer scrolls) and allows selections that
+        # extend beyond the visible area.
+        bounds = self._sel_bounds()
+        if bounds is not None:
+            r0, c0, r1, c1 = bounds
+            scroll_pos = self._scroll_pos()
+            vr0 = max(r0, scroll_pos)
+            vr1 = min(r1, scroll_pos + self.rows - 1)
+            if vr0 <= vr1:
                 painter.setCompositionMode(QtGui.QPainter.CompositionMode_Difference)
-                for r in range(r0, r1 + 1):
-                    x0 = (c0 if r == r0 else 0) * self.char_w
-                    x1 = (c1 if r == r1 else self.cols - 1) * self.char_w + self.char_w
-                    y = r * self.char_h
+                for abs_r in range(vr0, vr1 + 1):
+                    view_r = abs_r - scroll_pos
+                    x0 = (c0 if abs_r == r0 else 0) * self.char_w
+                    x1 = (c1 if abs_r == r1 else self.cols - 1) * self.char_w + self.char_w
+                    y = view_r * self.char_h
                     painter.fillRect(QtCore.QRect(x0, y, x1 - x0, self.char_h), QtGui.QColor(255, 255, 255, 120))
 
     def _toggle_cursor(self):
@@ -736,37 +745,87 @@ class TerminalWidget(QtWidgets.QAbstractScrollArea):
         return None
 
     # --------------------------- Selection/Clipboard ------------------------
-    def _view_to_cell(self, pos: QtCore.QPoint) -> Tuple[int, int]:
+    def _scroll_pos(self) -> int:
+        return clamp(self.scrollbar.value(), 0, self._max_scroll())
+
+    def _max_scroll(self) -> int:
+        return max(0, len(self.screen.scrollback) + len(self.screen.primary) - self.rows)
+
+    def _full_lines(self) -> List[List[Cell]]:
+        return list(self.screen.scrollback) + self.screen.primary
+
+    def _view_to_abs(self, pos: QtCore.QPoint) -> Tuple[int, int]:
+        """Map a viewport pixel position to absolute buffer (row, col)."""
         r = clamp(pos.y() // self.char_h, 0, self.rows - 1)
         c = clamp(pos.x() // self.char_w, 0, self.cols - 1)
-        return (r, c)
+        return (self._scroll_pos() + r, c)
 
-    def _norm_sel(self, a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
+    def _sel_bounds(self) -> Optional[Tuple[int, int, int, int]]:
+        """Return (r0, c0, r1, c1) of the selection, normalized and clipped."""
+        if self.sel_anchor is None or self.sel_cursor is None:
+            return None
+        a = self.sel_anchor
+        b = self.sel_cursor
+        if a > b:
+            a, b = b, a
         (r0, c0), (r1, c1) = a, b
-        if (r0, c0) > (r1, c1):
-            r0, c0, r1, c1 = r1, c1, r0, c0
-        return ((r0, c0), (r1, c1))
+        return (r0, c0, r1, c1)
 
     def mousePressEvent(self, e: QtGui.QMouseEvent) -> None:
         if e.button() == QtCore.Qt.LeftButton:
-            self.selection_active = True
-            self.sel_start = self._view_to_cell(e.position().toPoint())
-            self.sel_end = self.sel_start
+            self.selecting = True
+            self._dragged = False
+            self._last_mouse_pos = e.position().toPoint()
+            self.sel_anchor = self._view_to_abs(self._last_mouse_pos)
+            self.sel_cursor = self.sel_anchor
             self.viewport().update()
         super().mousePressEvent(e)
 
     def mouseMoveEvent(self, e: QtGui.QMouseEvent) -> None:
-        if self.selection_active and self.sel_start is not None:
-            self.sel_end = self._view_to_cell(e.position().toPoint())
+        pos = e.position().toPoint()
+        if self.selecting:
+            if self._last_mouse_pos is not None and pos != self._last_mouse_pos:
+                self._dragged = True
+            self._last_mouse_pos = pos
+            self.sel_cursor = self._view_to_abs(pos)
             self.viewport().update()
+        else:
+            self._last_mouse_pos = pos
         super().mouseMoveEvent(e)
 
     def mouseReleaseEvent(self, e: QtGui.QMouseEvent) -> None:
-        if e.button() == QtCore.Qt.LeftButton:
-            if self.selection_active:
-                self.selection_active = False
-                self.viewport().update()
+        if e.button() == QtCore.Qt.LeftButton and self.selecting:
+            self.selecting = False
+            if not self._dragged:
+                # A plain click (no drag, no scroll) clears any selection.
+                self.sel_anchor = None
+                self.sel_cursor = None
+            self.viewport().update()
         super().mouseReleaseEvent(e)
+
+    def wheelEvent(self, e: QtGui.QWheelEvent) -> None:
+        """Scroll with the wheel; while dragging, extend the selection to the
+        text that is now under the cursor, so you can select beyond the
+        visible area without releasing the mouse button."""
+        if self.selecting and self.sel_anchor is not None:
+            delta = e.angleDelta().y()
+            if delta == 0:
+                pdelta = e.pixelDelta().y()
+                delta = pdelta if pdelta != 0 else 0
+            if delta != 0:
+                steps = delta // 120
+                if steps == 0:
+                    steps = 1 if delta > 0 else -1
+                self._dragged = True
+                self.scrollbar.setRange(0, self._max_scroll())
+                new_val = clamp(self._scroll_pos() - steps * 3, 0, self._max_scroll())
+                self.scrollbar.setValue(new_val)
+                if self._last_mouse_pos is not None:
+                    self.sel_cursor = self._view_to_abs(self._last_mouse_pos)
+                self.viewport().update()
+            e.accept()
+            return
+        super().wheelEvent(e)
 
     def contextMenuEvent(self, e: QtGui.QContextMenuEvent) -> None:
         menu = QtWidgets.QMenu(self)
@@ -782,15 +841,17 @@ class TerminalWidget(QtWidgets.QAbstractScrollArea):
             self.reset_terminal()
 
     def copy_selection(self):
-        if not (self.sel_start and self.sel_end):
+        bounds = self._sel_bounds()
+        if bounds is None:
             return
-        a = self._norm_sel(self.sel_start, self.sel_end)
-        if not a:
-            return
-        (r0, c0), (r1, c1) = a
+        r0, c0, r1, c1 = bounds
+        full_lines = self._full_lines()
+
         lines: List[str] = []
         for r in range(r0, r1 + 1):
-            row = self.screen.primary[r]
+            if r < 0 or r >= len(full_lines):
+                continue
+            row = full_lines[r]
             start = c0 if r == r0 else 0
             end = c1 if r == r1 else self.cols - 1
             text = ''.join(cell.ch for cell in row[start:end + 1]).rstrip()
@@ -806,6 +867,10 @@ class TerminalWidget(QtWidgets.QAbstractScrollArea):
     def reset_terminal(self):
         self.screen.reset()
         self.parser = AnsiParser(self.screen)
+        self.sel_anchor = None
+        self.sel_cursor = None
+        self.selecting = False
+        self._dragged = False
         self._update_scrollbar_and_view()
 
 

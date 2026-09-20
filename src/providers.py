@@ -97,6 +97,28 @@ def _run(cmd: list[str]) -> str:
     return out
 
 
+def sudo_credentials_valid() -> bool:
+    """Check non-interactively whether sudo credentials are still cached.
+
+    Uses `sudo -n true`, which never prompts: it exits 0 when the
+    timestamp is valid, 1 otherwise. The cache is shared by all sudo
+    invocations on this host (including those spawned by AUR helpers),
+    so priming it once via `sudo -v` avoids repeated password prompts.
+    """
+    if not shutil.which("sudo"):
+        return False
+    try:
+        proc = subprocess.run(
+            ["sudo", "-n", "true"],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "LC_ALL": "C"},
+        )
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
 def _which_or_hint(cmd: str) -> bool:
     """Return True if an executable command is available."""
     return shutil.which(cmd) is not None
