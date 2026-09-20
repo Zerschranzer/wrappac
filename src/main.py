@@ -897,6 +897,24 @@ class MainWindow(QMainWindow):
                 continue
             normalized.append((argv, needs_root))
 
+        # Prime sudo credentials once for the whole sequence. sudo caches
+        # the timestamp per user, and the cache is shared by every sudo
+        # invocation - including the one AUR helpers (yay/paru) spawn
+        # internally for `pacman -U`. Without this, each privileged step
+        # (pacman -Syu, AUR install, flatpak --system) would prompt again.
+        has_privileged = any(needs_root for _, needs_root in normalized)
+        has_aur_helper = any(
+            argv[0] in {"yay", "paru", "pikaur", "aurman"}
+            for argv, _ in normalized
+        )
+        if (
+            settings.get_root_command() == ["sudo"]
+            and (has_privileged or has_aur_helper)
+            and not providers.sudo_credentials_valid()
+        ):
+            self.console.feed_text(tr("msg_sudo_prime") + "\n")
+            normalized.insert(0, (["sudo", "-v"], False))
+
         message = final_message if final_message is not None else tr("msg_updates_complete")
 
         if not normalized:
