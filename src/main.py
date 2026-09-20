@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 import shutil
 import subprocess
@@ -903,8 +904,13 @@ class MainWindow(QMainWindow):
         # internally for `pacman -U`. Without this, each privileged step
         # (pacman -Syu, AUR install, flatpak --system) would prompt again.
         has_privileged = any(needs_root for _, needs_root in normalized)
+        # AUR helpers may be configured via custom path, so match on the
+        # executable name as well as the configured helper itself.
+        helper = settings.get_aur_helper()
+        helper_base = os.path.basename(helper) if helper else None
         has_aur_helper = any(
-            argv[0] in {"yay", "paru", "pikaur", "aurman"}
+            os.path.basename(argv[0]) in {"yay", "paru", "pikaur", "aurman"}
+            or (helper_base is not None and os.path.basename(argv[0]) == helper_base)
             for argv, _ in normalized
         )
         if (
@@ -929,32 +935,40 @@ class MainWindow(QMainWindow):
                 self._schedule_refresh()
             return
 
-        self._cmd_queue = list(normalized)
-        completed_codes: List[int] = []
+        # Prefix root commands, then run the whole sequence in a single
+        # PTY: sudo's per-tty credential ticket (default `tty_tickets`)
+        # must cover every step - including the sudo that AUR helpers
+        # spawn internally - so the password is asked only once.
+        steps: List[List[str]] = []
+        for argv, needs_root in normalized:
+            if needs_root:
+                root_cmd = settings.get_root_command()
+                if root_cmd:
+                    steps.append(root_cmd + argv)
+                else:
+                    self.console.feed_text(tr("msg_no_root_method") + "\n")
+                    continue
+            else:
+                steps.append(list(argv))
 
-        try:
-            self.runner.finished.disconnect(self._runner_finished_handler)
-        except (RuntimeError, TypeError):
-            # Signal was already disconnected or never connected - this is fine
-            pass
+        if not steps:
+            if message:
+                self.console.feed_text("\n" + message + "\n")
+            if on_done:
+                try:
+                    on_done(False)
+                except Exception:
+                    pass
+            if schedule_refresh:
+                self._schedule_refresh()
+            return
 
-        def _on_command_finished(exit_code: int) -> None:
-            completed_codes.append(exit_code)
-            _run_next()
-
-        def _restore_default_handler():
+        def _finish_sequence(codes: List[int]) -> None:
             try:
-                self.runner.finished.disconnect(_on_command_finished)
+                self.runner.sequence_finished.disconnect(_finish_sequence)
             except Exception:
                 pass
-            try:
-                self.runner.finished.disconnect(self._runner_finished_handler)
-            except Exception:
-                pass
-            self.runner.finished.connect(self._runner_finished_handler)
-
-        def _finish_sequence():
-            success = bool(completed_codes) and all(code == 0 for code in completed_codes)
+            success = bool(codes) and all(code == 0 for code in codes)
             if message:
                 self.console.feed_text("\n" + message + "\n")
             if on_done:
@@ -969,7 +983,7 @@ class MainWindow(QMainWindow):
                     QSystemTrayIcon.Information,
                 )
             elif not success and settings.get("notify_errors", True):
-                code = completed_codes[-1] if completed_codes else -1
+                code = codes[-1] if codes else -1
                 body = f"{tr('notification_error_title')} (code {code})"
                 self._show_notification(
                     tr("notification_error_title"),
@@ -978,27 +992,14 @@ class MainWindow(QMainWindow):
                 )
             if schedule_refresh:
                 self._schedule_refresh()
-            _restore_default_handler()
 
-        def _run_next():
-            if not self._cmd_queue:
-                _finish_sequence()
-                return
-
-            argv, needs_root = self._cmd_queue.pop(0)
-            if needs_root:
-                root_cmd = settings.get_root_command()
-                if root_cmd:
-                    argv = root_cmd + argv
-                else:
-                    self.console.feed_text(tr("msg_no_root_method") + "\n")
-                    _run_next()
-                    return
-
-            self.runner.run(argv)
-
-        self.runner.finished.connect(_on_command_finished)
-        _run_next()
+        try:
+            self.runner.sequence_finished.disconnect(_finish_sequence)
+        except Exception:
+            # Signal was never connected - this is fine
+            pass
+        self.runner.sequence_finished.connect(_finish_sequence)
+        self.runner.run_sequence(steps)
 
     def _command_requires_root(self, argv: List[str]) -> bool:
         if not argv:
