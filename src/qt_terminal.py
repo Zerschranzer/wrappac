@@ -784,15 +784,26 @@ class TerminalWidget(QtWidgets.QAbstractScrollArea):
             self.reset_terminal()
 
     def copy_selection(self):
-        if not (self.sel_start and self.sel_end):
+        if self.sel_start is None or self.sel_end is None:
             return
-        a = self._norm_sel(self.sel_start, self.sel_end)
-        if not a:
-            return
-        (r0, c0), (r1, c1) = a
+        (r0, c0), (r1, c1) = self._norm_sel(self.sel_start, self.sel_end)
+
+        # The selection is stored in viewport coordinates (row 0..rows-1),
+        # but the text lives in the full buffer (scrollback + primary). When
+        # scrolled up, primary[r] is a different line than the one the user
+        # selected, so translate the viewport row by the scroll offset before
+        # reading. Without this, copying from a scrolled-up terminal returned
+        # the wrong line (or an empty one).
+        full_lines = list(self.screen.scrollback) + self.screen.primary
+        max_scroll = max(0, len(full_lines) - self.rows)
+        scroll_pos = clamp(self.scrollbar.value(), 0, max_scroll)
+
         lines: List[str] = []
         for r in range(r0, r1 + 1):
-            row = self.screen.primary[r]
+            abs_row = scroll_pos + r
+            if abs_row < 0 or abs_row >= len(full_lines):
+                continue
+            row = full_lines[abs_row]
             start = c0 if r == r0 else 0
             end = c1 if r == r1 else self.cols - 1
             text = ''.join(cell.ch for cell in row[start:end + 1]).rstrip()
