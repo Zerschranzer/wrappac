@@ -5,7 +5,7 @@ import subprocess
 import shlex
 from typing import Dict, Iterable, List, Optional, Set
 
-from models import PackageItem
+from packages import PackageItem
 from settings import settings
 
 _run_errors: list[dict[str, str]] = []

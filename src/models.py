@@ -1,18 +1,10 @@
-from dataclasses import dataclass
-import re
 from typing import List
+
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
 
 from i18n import tr
+from packages import PackageItem, size_to_bytes, version_key
 
-@dataclass
-class PackageItem:
-    pid: str           # pacman: package name, flatpak: app ID
-    name: str          # Display name
-    version: str
-    source: str        # "Repo" | "AUR" | "Flatpak"
-    origin: str        # Repository or remote (e.g. extra, community, local, flathub)
-    size: str = ""
 
 class PackageModel(QAbstractTableModel):
     headers = ["Name", "Version", "Size", "Quelle", "Origin/Repo", "ID"]
@@ -63,7 +55,9 @@ class PackageModel(QAbstractTableModel):
 
         def _sort_key(item: PackageItem):
             if self._sort_column == 2:
-                return self._size_to_bytes(item.size)
+                return size_to_bytes(item.size)
+            if self._sort_column == 1:
+                return version_key(item.version)
             attr = attr_map.get(self._sort_column, 'name')
             value = getattr(item, attr, '')
             if isinstance(value, str):
@@ -145,32 +139,3 @@ class PackageModel(QAbstractTableModel):
 
     def item_at(self, row: int) -> PackageItem:
         return self._filtered[row]
-
-    @staticmethod
-    def _size_to_bytes(size: str) -> float:
-        if not size:
-            return 0.0
-        match = re.match(r"([0-9.,]+)\s*([KMGTPE]?i?B)?", size.strip())
-        if not match:
-            return 0.0
-        number_part = match.group(1).replace(',', '.')
-        try:
-            value = float(number_part)
-        except ValueError:
-            return 0.0
-        unit = (match.group(2) or '').upper()
-        factors = {
-            'B': 1,
-            'KIB': 1024,
-            'MIB': 1024 ** 2,
-            'GIB': 1024 ** 3,
-            'TIB': 1024 ** 4,
-            'PIB': 1024 ** 5,
-            'KB': 1000,
-            'MB': 1000 ** 2,
-            'GB': 1000 ** 3,
-            'TB': 1000 ** 4,
-            'PB': 1000 ** 5,
-        }
-        multiplier = factors.get(unit, 1)
-        return value * multiplier

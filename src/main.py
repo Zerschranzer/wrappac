@@ -25,7 +25,9 @@ from PySide6.QtWidgets import (
     QFileDialog, QCompleter
 )
 
-from models import PackageModel, PackageItem
+import packages
+from models import PackageModel
+from packages import PackageItem
 import providers
 from managed_terminal import ManagedTerminalWidget
 from settings import settings
@@ -1260,7 +1262,7 @@ class MainWindow(QMainWindow):
         aur = sum(1 for it in items if it.source == "AUR")
         flatpak = sum(1 for it in items if it.source == "Flatpak")
         size_bytes = sum(
-            PackageModel._size_to_bytes(it.size)
+            packages.size_to_bytes(it.size)
             for it in items
             if it.size and it.size != "?"
         )
@@ -2215,7 +2217,7 @@ class MainWindow(QMainWindow):
 
     def _queue_install_all(self):
         if not self.install_queue:
-            QMessageBox.information(self, tr("menu_queue"), tr("msg_queue_empty"))
+            QMessageBox.information(self, tr("install_queue"), tr("msg_queue_empty"))
             return
         flatpak_by_remote: Dict[str, List[str]] = {}
         repo_pkgs: List[str] = []

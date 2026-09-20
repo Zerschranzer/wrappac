@@ -1,0 +1,18 @@
+[project]
+name = "wrappac"
+version = "1.0.1"
+description = "Minimalist GUI wrapper for pacman, AUR and Flatpak"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "PySide6>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
