@@ -2229,17 +2229,16 @@ class MainWindow(QMainWindow):
             elif src == "AUR":
                 aur_pkgs.append(ident)
 
+        # Build a single command sequence so every install step shares one
+        # PTY: sudo keeps one credential ticket (one password prompt) and
+        # later steps no longer SIGHUP earlier ones that are still running.
+        commands: List[Dict[str, object]] = []
         if flatpak_by_remote:
-            self._flatpak_install_grouped(flatpak_by_remote)
+            commands.extend(self._build_flatpak_install_commands(flatpak_by_remote))
 
         if repo_pkgs:
             self.console.feed_text(tr("msg_installing_repo", ', '.join(repo_pkgs)) + "\n")
-            argv = ["pacman", "-S"] + repo_pkgs
-            root_cmd = settings.get_root_command()
-            if root_cmd:
-                self.runner.run(root_cmd + argv)
-            else:
-                self.console.feed_text(tr("msg_no_root_method") + "\n")
+            commands.append({"argv": ["pacman", "-S"] + repo_pkgs, "needs_root": True})
 
         if aur_pkgs:
             tool = settings.get_aur_helper()
@@ -2247,9 +2246,12 @@ class MainWindow(QMainWindow):
                 self.console.feed_text(tr("msg_aur_no_helper_skip") + "\n")
             else:
                 self.console.feed_text(tr("msg_installing_aur", tool, ', '.join(aur_pkgs)) + "\n")
-                self.runner.run([tool, "-S"] + aur_pkgs)
+                commands.append({"argv": [tool, "-S"] + aur_pkgs, "needs_root": False})
 
         self._queue_clear()
+
+        if commands:
+            self._run_cmds_sequential(commands, final_message="")
 
     def _queue_clear(self):
         self.install_queue.clear()
@@ -2364,7 +2366,7 @@ class MainWindow(QMainWindow):
 
         self._run_cmds_sequential(seq, final_message="")
 
-    def _flatpak_install_grouped(self, grouped: Dict[str, List[str]]):
+    def _build_flatpak_install_commands(self, grouped: Dict[str, List[str]]) -> List[Dict[str, object]]:
         scopes = self._flatpak_list_remotes()
         user_remotes = scopes["user"]
         system_remotes = scopes["system"]
@@ -2397,8 +2399,7 @@ class MainWindow(QMainWindow):
                 argv = ["flatpak", "install", scope_flag, "-y"] + appids
                 commands.append({"argv": argv, "needs_root": needs_root})
 
-        if commands:
-            self._run_cmds_sequential(commands, final_message="")
+        return commands
 
     def _handle_flatpak_missing_remotes(self, missing_remotes: Set[str], user_remotes: Set[str],
                                         default_scope: str) -> bool:
