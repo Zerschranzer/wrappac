@@ -52,6 +52,15 @@ class ManagedTerminalWidget(QtTerminalWidget):
         if env:
             merged_env.update(env)
 
+        # A single command must never be reported through sequence_finished:
+        # clear any leftover sequence state (e.g. a sequence that was
+        # interrupted before its process was reaped) so this run emits the
+        # regular finished signal.
+        if self._seq_rc_dir is not None:
+            shutil.rmtree(self._seq_rc_dir, ignore_errors=True)
+            self._seq_rc_dir = None
+        self._seq_count = 0
+
         # Use the base class start_process method
         self.start_process(command, env=merged_env)
         self._process_exit_code = None
